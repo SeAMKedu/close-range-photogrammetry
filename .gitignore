@@ -1,0 +1,5 @@
+__pycache__/
+foto3Dvenv/
+.foto3Dvenv/
+test.py
+*.pyc

@@ -1,0 +1,26 @@
+img_root: "C:/Users/k5000582/Documents/Hankkeet/3DLaatu/Kuvasetit/2026-05-19"
+
+camera_names:
+  - Basler 60gc
+  - Basler 60gm
+  - Hikrobot
+
+reference_camera_index: 0 # Color camera is a better reference for meshing
+
+checkerboard:
+  board_size: [16, 11] # Number of inner corners per chessboard row and column (width, height)
+  square_size: 7
+  unit: "mm"
+
+folders:
+  calibration_files: "calibration_files"
+  intrinsic_images: "chessboards/intrinsics_img_sets"
+  extrinsic_images: "chessboards/extrinsics_img_sets"
+  objects: "object"
+  reconstruction_results: "reconstruction_results"
+  filtered_point_clouds: "filtered_point_clouds"
+  mesh_results: "mesh_results"
+
+filenames:
+  calibration_result_ending: "_calibration.json"
+  extrinsics_result: "extrinsics_result.json"

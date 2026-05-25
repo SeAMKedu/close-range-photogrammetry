@@ -291,7 +291,7 @@ def detect_checkerboards_in_synchronized_frames(
             image_points_by_camera[camera_index] = corners.reshape(-1, 2).astype(np.float32)
 
             if save_corner_images and corner_output_folder is not None:
-                output_path = corner_output_folder / frame_name / camera_name / image_path.name
+                output_path = corner_output_folder / f"frame_{frame_name}_{camera_name}_{image_path.name}"
                 save_corner_visualization(
                     image=image,
                     board_size=board_size,

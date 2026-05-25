@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
-from project_config import load_project_config
+from project_config import load_project_config, make_run_suffix
 
 import cv2
 import numpy as np
@@ -471,15 +471,56 @@ def reconstruct_object_sparse_point_cloud(
     feature_method: str = "sift",
     lowe_ratio: float = 0.75,
     max_reprojection_error_px: float = 5.0,
+    target_camera_indices: Sequence[int] | None = None,
+    frame_keys_to_use: Sequence[str] | None = None,
 ) -> TriangulatedPointCloud:
     """Reconstruct a sparse point cloud for one object folder."""
     object_root = Path(object_root)
     object_name = object_root.name
     reference_camera_name = camera_names[reference_camera_index]
 
+    # For debugging: optionally reconstruct only selected camera pairs.
+    # If target_camera_indices is None, use all cameras except the reference camera.
+    if target_camera_indices is None:
+        target_camera_indices = [
+            index
+            for index in range(len(camera_names))
+            if index != reference_camera_index
+        ]
+    else:
+        target_camera_indices = list(target_camera_indices)
+
+    for target_camera_index in target_camera_indices:
+        if not (0 <= target_camera_index < len(camera_names)):
+            raise ValueError(
+                f"Invalid target camera index {target_camera_index}. "
+                f"Valid indices are 0 ... {len(camera_names) - 1}."
+            )
+
     frames = collect_object_frames_by_camera_dirs(
         object_root=object_root,
         camera_names=camera_names,
+    )
+
+    # For debugging: optionally use only selected frame keys.
+    if frame_keys_to_use is not None:
+        allowed_frame_keys = {str(key) for key in frame_keys_to_use}
+
+        frames = [
+            frame
+            for frame in frames
+            if frame["__frame_key__"].stem in allowed_frame_keys
+        ]
+
+        if not frames:
+            raise RuntimeError(
+                f"No frames matched frame_keys_to_use={sorted(allowed_frame_keys)} "
+                f"for object {object_root}"
+            )
+
+    print(
+        f"[DEBUG] {object_name}: using target_camera_indices={list(target_camera_indices)}, "
+        f"frame_keys={[frame['__frame_key__'].stem for frame in frames]}"
     )
 
     all_points: list[np.ndarray] = []
@@ -496,9 +537,16 @@ def reconstruct_object_sparse_point_cloud(
         frame_points: list[np.ndarray] = []
         frame_colors: list[np.ndarray] = []
 
-        for target_camera_index, target_camera_name in enumerate(camera_names):
+        for target_camera_index in target_camera_indices:
             if target_camera_index == reference_camera_index:
                 continue
+
+            target_camera_name = camera_names[target_camera_index]
+
+            print(
+                f"[DEBUG] Using pair: {reference_camera_name} - {target_camera_name} "
+                f"(indices {reference_camera_index}-{target_camera_index}), frame={frame_key}"
+            )
 
             target_image = cv2.imread(str(frame[target_camera_name]), cv2.IMREAD_COLOR)
             if target_image is None:
@@ -506,18 +554,18 @@ def reconstruct_object_sparse_point_cloud(
                 continue
 
             debug_match_image_path = (
-            object_root 
-            / Path("debug_feature_matches")
-            / f"frame_{frame_key}_{reference_camera_name}_to_{target_camera_name}_matches.jpg"
+                object_root
+                / "debug_feature_matches"
+                / f"frame_{frame_key}_{reference_camera_name}_to_{target_camera_name}_matches.jpg"
             )
 
             matched_pair = match_features(
-            reference_image_bgr=reference_image,
-            target_image_bgr=target_image,
-            method=feature_method,
-            lowe_ratio=lowe_ratio,
-            debug_match_image_path=debug_match_image_path,
-            max_debug_matches=100,
+                reference_image_bgr=reference_image,
+                target_image_bgr=target_image,
+                method=feature_method,
+                lowe_ratio=lowe_ratio,
+                debug_match_image_path=debug_match_image_path,
+                max_debug_matches=100,
             )
 
             if matched_pair is None:
@@ -626,6 +674,8 @@ def reconstruct_all_objects_in_project(
     project_root: Path | str,
     camera_names: Sequence[str],
     reference_camera_index: int = 0,
+    target_camera_indices: Sequence[int] | None = None,
+    frame_keys_to_use: Sequence[str] | None = None,
     output_folder_name: str = "reconstruction_results",
 ) -> None:
     """Reconstruct sparse point clouds for every object folder in the project."""
@@ -665,6 +715,8 @@ def reconstruct_all_objects_in_project(
             feature_method="sift",
             lowe_ratio=0.75,
             max_reprojection_error_px=5.0,
+            target_camera_indices=target_camera_indices, # For debugging
+            frame_keys_to_use=frame_keys_to_use, # For debugging
         )
 
         object_output_dir = output_root / object_dir.name
@@ -682,15 +734,23 @@ def main() -> None:
     config = load_project_config(Path("project_config.yaml"))
     project_root = Path(config["img_root"])
 
-    camera_names = config["camera_names"]
+    debug = config.get("debug", {})
+    run_suffix = make_run_suffix(config)
 
+    target_camera_indices = debug.get("target_camera_indices")
+    frame_keys_to_use = debug.get("frame_keys_to_use")
+
+    camera_names = config["camera_names"]
+    output_folder_name = config["folders"]["reconstruction_results"] + run_suffix
+        
     reconstruct_all_objects_in_project(
         project_root=project_root,
         camera_names=camera_names,
         reference_camera_index=config["reference_camera_index"],
-        output_folder_name=config["folders"]["reconstruction_results"],
+        target_camera_indices=target_camera_indices, 
+        frame_keys_to_use=frame_keys_to_use,
+        output_folder_name=output_folder_name,
     )
-
 
 if __name__ == "__main__":
     main()

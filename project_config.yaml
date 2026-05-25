@@ -5,18 +5,20 @@ camera_names:
   - Basler 60gm
   - Hikrobot
 
-reference_camera_index: 0 # Color camera is a better reference for meshing
+reference_camera_index: 0 # Color camera is a better reference for meshing (to get the texture right)
 
 checkerboard:
   board_size: [16, 11] # Number of inner corners per chessboard row and column (width, height)
   square_size: 7
   unit: "mm"
 
+# The folder names and file name patterns used in the project.
+# First three are input folders, last four are output folders.
 folders:
-  calibration_files: "calibration_files"
   intrinsic_images: "chessboards/intrinsics_img_sets"
   extrinsic_images: "chessboards/extrinsics_img_sets"
   objects: "object"
+  calibration_files: "calibration_files"
   reconstruction_results: "reconstruction_results"
   filtered_point_clouds: "filtered_point_clouds"
   mesh_results: "mesh_results"
@@ -24,3 +26,10 @@ folders:
 filenames:
   calibration_result_ending: "_calibration.json"
   extrinsics_result: "extrinsics_result.json"
+
+# Debug: use only certain cameras and frames to find issues 
+# in reconstructions results. Null uses all cameras/frames.
+debug:
+  enabled: true
+  target_camera_indices: [2]   # null, [1], [2]
+  frame_keys_to_use: null     # null, ["1"], ["1", "2"], ["4"], ...

@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
-from project_config import load_project_config
+from project_config import load_project_config, make_run_suffix
 
 import numpy as np
 
@@ -415,8 +415,10 @@ def main() -> None:
     config = load_project_config(Path("project_config.yaml"))
     project_root = Path(config["img_root"])
 
-    input_root = project_root / config["folders"]["reconstruction_results"]
-    output_root = project_root / config["folders"]["filtered_point_clouds"]
+    run_suffix = make_run_suffix(config)
+
+    input_root = project_root / (config["folders"]["reconstruction_results"] + run_suffix)
+    output_root = project_root / (config["folders"]["filtered_point_clouds"] + run_suffix)
 
     # Coordinate units are the same as your extrinsic calibration square size.
     # If your checkerboard square size was in millimetres, these values are in millimetres.

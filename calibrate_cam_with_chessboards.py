@@ -233,13 +233,13 @@ def calibrate_camera_from_chessboard_images(
 
     return result
 
-if __name__ == "__main__":
+def main():
     config = load_project_config(Path("project_config.yaml"))
     img_root = Path(config["img_root"])
     chessboard_path = img_root / config["folders"]["intrinsic_images"]
     camera_names = config["camera_names"]
     for cam_name in camera_names:
-        result = calibrate_camera_from_chessboard_images(
+        calibrate_camera_from_chessboard_images(
             image_folder=chessboard_path / cam_name,
             board_size=tuple(config["checkerboard"]["board_size"]),
             square_size=config["checkerboard"]["square_size"],    
@@ -247,3 +247,6 @@ if __name__ == "__main__":
             save_corner_images=True,
             save_json_path=img_root / config["folders"]["calibration_files"] / f"{cam_name}{config['filenames']['calibration_result_ending']}",
         )
+
+if __name__ == "__main__":
+    main()

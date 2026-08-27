@@ -1,5 +1,4 @@
 img_root: "D:/your_project_path"
-
 camera_names:
   - Basler 60gc
   - Basler 60gm
@@ -20,16 +19,34 @@ folders:
   objects: "object"
   calibration_files: "calibration_files"
   reconstruction_results: "reconstruction_results"
-  filtered_point_clouds: "filtered_point_clouds"
-  mesh_results: "mesh_results"
 
 filenames:
   calibration_result_ending: "_calibration.json"
   extrinsics_result: "extrinsics_result.json"
 
+visual_hull:
+  # The borders in the reference camera's coordinate system.
+  # The unit is the same as the chessboard square size
+  bounds_min_xyz: [-100.0, -100.0, 300.0]
+  bounds_max_xyz: [100.0, 100.0, 500.0]
+
+  voxel_size: 1.0
+
+  threshold: 25
+  morph_kernel_size: 5
+  mask_dilation_px: 3
+  keep_largest_component: true
+
+  # null = voxel is accepted only if it is inside the object mask in all cameras.
+  min_camera_support: null
+
+  save_debug_masks: true
+  save_occupied_voxels: true
+  save_surface_voxels: true
+
 # Debug: use only certain cameras and frames to find issues 
 # in reconstructions results. Null uses all cameras/frames.
 debug:
-  enabled: true
+  enabled: false
   target_camera_indices: [2]   # null, [1], [2]
   frame_keys_to_use: null     # null, ["1"], ["1", "2"], ["4"], ...

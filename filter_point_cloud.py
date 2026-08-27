@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,7 +24,7 @@ class PointCloudData:
     points_xyz: np.ndarray
     colors_rgb: np.ndarray | None
     source_object_name: str
-    source_frame_keys: list[str]
+    source_frame_key: str
 
 
 @dataclass
@@ -47,7 +48,7 @@ def natural_sort_key(text: str) -> list[int | str]:
 
 
 def load_point_cloud_npz(path: Path | str) -> PointCloudData:
-    """Load a point cloud saved by reconstruct_sparse_point_cloud.py."""
+    """Load a frame-specific sparse point cloud."""
     path = Path(path)
 
     with np.load(path, allow_pickle=True) as data:
@@ -57,19 +58,19 @@ def load_point_cloud_npz(path: Path | str) -> PointCloudData:
         if "colors_rgb" in data:
             colors_rgb = np.asarray(data["colors_rgb"], dtype=np.uint8)
 
-        source_object_name = path.parent.name
+        source_object_name = path.parent.parent.name
         if "source_object_name" in data:
             source_object_name = str(data["source_object_name"])
 
-        source_frame_keys: list[str] = []
-        if "source_frame_keys" in data:
-            source_frame_keys = [str(value) for value in data["source_frame_keys"]]
+        source_frame_key = path.parent.name.removeprefix("frame_")
+        if "source_frame_key" in data:
+            source_frame_key = str(data["source_frame_key"])
 
     return PointCloudData(
         points_xyz=points_xyz,
         colors_rgb=colors_rgb,
         source_object_name=source_object_name,
-        source_frame_keys=source_frame_keys,
+        source_frame_key=source_frame_key,
     )
 
 
@@ -81,7 +82,7 @@ def save_point_cloud_npz(point_cloud: PointCloudData, output_path: Path | str) -
     arrays = {
         "points_xyz": point_cloud.points_xyz.astype(np.float32),
         "source_object_name": np.asarray(point_cloud.source_object_name),
-        "source_frame_keys": np.asarray(point_cloud.source_frame_keys),
+        "source_frame_key": np.asarray(point_cloud.source_frame_key),
     }
 
     if point_cloud.colors_rgb is not None:
@@ -104,20 +105,24 @@ def point_cloud_data_to_open3d(point_cloud: PointCloudData) -> o3d.geometry.Poin
 def open3d_to_point_cloud_data(
     cloud: o3d.geometry.PointCloud,
     source_object_name: str,
-    source_frame_keys: Sequence[str],
+    source_frame_key: str,
 ) -> PointCloudData:
     """Convert an Open3D point cloud back to PointCloudData."""
     points_xyz = np.asarray(cloud.points, dtype=np.float64)
 
     colors_rgb = None
     if cloud.has_colors():
-        colors_rgb = np.clip(np.asarray(cloud.colors) * 255.0, 0, 255).astype(np.uint8)
+        colors_rgb = np.clip(
+            np.asarray(cloud.colors) * 255.0,
+            0,
+            255,
+        ).astype(np.uint8)
 
     return PointCloudData(
         points_xyz=points_xyz,
         colors_rgb=colors_rgb,
         source_object_name=source_object_name,
-        source_frame_keys=list(source_frame_keys),
+        source_frame_key=source_frame_key,
     )
 
 
@@ -133,7 +138,7 @@ def remove_non_finite_points(point_cloud: PointCloudData) -> PointCloudData:
         points_xyz=point_cloud.points_xyz[mask],
         colors_rgb=colors,
         source_object_name=point_cloud.source_object_name,
-        source_frame_keys=point_cloud.source_frame_keys,
+        source_frame_key=point_cloud.source_frame_key,
     )
 
 
@@ -164,7 +169,7 @@ def filter_by_depth(
         points_xyz=point_cloud.points_xyz[mask],
         colors_rgb=colors,
         source_object_name=point_cloud.source_object_name,
-        source_frame_keys=point_cloud.source_frame_keys,
+        source_frame_key=point_cloud.source_frame_key,
     )
 
 
@@ -179,7 +184,7 @@ def voxel_downsample_with_open3d(
     return open3d_to_point_cloud_data(
         cloud,
         source_object_name=point_cloud.source_object_name,
-        source_frame_keys=point_cloud.source_frame_keys,
+        source_frame_key=point_cloud.source_frame_key,
     )
 
 
@@ -205,7 +210,7 @@ def remove_statistical_outliers(
     return open3d_to_point_cloud_data(
         filtered_cloud,
         source_object_name=point_cloud.source_object_name,
-        source_frame_keys=point_cloud.source_frame_keys,
+        source_frame_key=point_cloud.source_frame_key,
     )
 
 
@@ -231,7 +236,7 @@ def remove_radius_outliers(
     return open3d_to_point_cloud_data(
         filtered_cloud,
         source_object_name=point_cloud.source_object_name,
-        source_frame_keys=point_cloud.source_frame_keys,
+        source_frame_key=point_cloud.source_frame_key,
     )
 
 
@@ -354,36 +359,52 @@ def visualize_point_clouds(
     )
 
 
-def find_input_point_clouds(input_root: Path | str) -> list[Path]:
-    """Find sparse point-cloud NPZ files under the reconstruction output folder."""
-    input_root = Path(input_root)
-    paths = sorted(
-        input_root.glob("*/**/*_sparse_point_cloud.npz"),
-        key=lambda p: natural_sort_key(str(p)),
+def find_input_point_clouds(
+    reconstruction_root: Path | str,
+) -> list[Path]:
+    """Find frame-specific sparse point-cloud NPZ files."""
+    reconstruction_root = Path(reconstruction_root)
+
+    return sorted(
+        reconstruction_root.glob("**/sparse_point_cloud.npz"),
+        key=lambda path: natural_sort_key(str(path)),
     )
 
-    if not paths:
-        paths = sorted(
-            input_root.glob("**/*.npz"),
-            key=lambda p: natural_sort_key(str(p)),
-        )
 
-    return paths
+def update_frame_info_json(
+    frame_info_path: Path | str,
+    **updates,
+) -> None:
+    """Update selected fields in an existing frame_info.json file."""
+    frame_info_path = Path(frame_info_path)
+
+    if frame_info_path.exists():
+        with frame_info_path.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+    else:
+        data = {}
+
+    data.update(updates)
+
+    frame_info_path.parent.mkdir(parents=True, exist_ok=True)
+    with frame_info_path.open("w", encoding="utf-8") as file:
+        json.dump(data, file, indent=2)
 
 
 def filter_all_point_clouds(
-    input_root: Path | str,
-    output_root: Path | str,
+    reconstruction_root: Path | str,
     settings: FilteringSettings,
     visualize_each: bool = False,
 ) -> None:
-    """Filter every NPZ point cloud found under input_root."""
-    input_root = Path(input_root)
-    output_root = Path(output_root)
+    """Filter every frame-specific sparse point cloud under reconstruction_root."""
+    reconstruction_root = Path(reconstruction_root)
 
-    input_paths = find_input_point_clouds(input_root)
+    input_paths = find_input_point_clouds(reconstruction_root)
     if not input_paths:
-        raise FileNotFoundError(f"No NPZ point clouds found under {input_root}")
+        raise FileNotFoundError(
+            f"No sparse_point_cloud.npz files found under "
+            f"{reconstruction_root}"
+        )
 
     for input_path in input_paths:
         print(f"\nProcessing: {input_path}")
@@ -391,17 +412,26 @@ def filter_all_point_clouds(
         original = load_point_cloud_npz(input_path)
         filtered = filter_point_cloud(original, settings)
 
-        object_name = original.source_object_name
-        object_output_root = output_root / object_name
+        frame_output_dir = input_path.parent
 
-        npz_output_path = object_output_root / f"{object_name}_filtered_point_cloud.npz"
-        ply_output_path = object_output_root / f"{object_name}_filtered_point_cloud.ply"
+        npz_output_path = frame_output_dir / "filtered_point_cloud.npz"
+        ply_output_path = frame_output_dir / "filtered_point_cloud.ply"
+        frame_info_path = frame_output_dir / "frame_info.json"
 
         save_point_cloud_npz(filtered, npz_output_path)
         save_point_cloud_ply(filtered, ply_output_path)
 
+        update_frame_info_json(
+            frame_info_path,
+            filtered_points=int(len(filtered.points_xyz)),
+        )
+
         print(f"Saved filtered NPZ: {npz_output_path}")
         print(f"Saved filtered PLY: {ply_output_path}")
+        print(
+            f"Frame {filtered.source_frame_key}: "
+            f"{len(filtered.points_xyz)} filtered points"
+        )
 
         if visualize_each:
             visualize_point_clouds(
@@ -412,13 +442,19 @@ def filter_all_point_clouds(
 
 
 def main() -> None:
+    """VS Code friendly entry point using project_config.yaml."""
     config = load_project_config(Path("project_config.yaml"))
     project_root = Path(config["img_root"])
 
     run_suffix = make_run_suffix(config)
 
-    input_root = project_root / (config["folders"]["reconstruction_results"] + run_suffix)
-    output_root = project_root / (config["folders"]["filtered_point_clouds"] + run_suffix)
+    reconstruction_root = (
+        project_root
+        / (
+            config["folders"]["reconstruction_results"]
+            + run_suffix
+        )
+    )
 
     # Coordinate units are the same as your extrinsic calibration square size.
     # If your checkerboard square size was in millimetres, these values are in millimetres.
@@ -427,24 +463,21 @@ def main() -> None:
         min_depth=0.0,
         max_depth=None,
 
-        # Set this after looking at point spacing. For a sparse cloud, start with None.
+        # For a sparse cloud, start with None.
         # Example for millimetre-scale data: voxel_size=0.5 or 1.0
         voxel_size=None,
 
-        # Good initial values for sparse feature-based triangulation.
         statistical_nb_neighbors=20,
         statistical_std_ratio=2.0,
 
-        # Optional stricter local-density filter. Enable only after testing.
         radius_outlier_nb_points=6,
         radius_outlier_radius=2.0,
     )
 
     filter_all_point_clouds(
-        input_root=input_root,
-        output_root=output_root,
+        reconstruction_root=reconstruction_root,
         settings=settings,
-        visualize_each=True,
+        visualize_each=False,
     )
 
 

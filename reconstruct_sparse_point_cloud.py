@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
@@ -40,12 +41,12 @@ class MatchedImagePair:
 
 @dataclass
 class TriangulatedPointCloud:
-    """Triangulated sparse point cloud in the reference camera coordinate system."""
+    """Sparse point cloud reconstructed from one synchronized frame."""
 
     points_xyz: np.ndarray
     colors_rgb: np.ndarray
     source_object_name: str
-    source_frame_keys: list[str]
+    source_frame_key: str
 
 
 def natural_sort_key(text: str) -> list[int | str]:
@@ -371,11 +372,12 @@ def triangulate_points_between_reference_and_target(
     target_calibration: CameraCalibration,
     target_pose: CameraPose,
     max_reprojection_error_px: float = 5.0,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Triangulate matched points between the reference camera and a target camera.
 
     Output coordinates are in the reference camera coordinate system.
+    The returned boolean mask refers to the original matched feature arrays.
     """
     ref_points_norm = undistort_points_to_normalized_camera(
         matched_pair.reference_points_px,
@@ -422,7 +424,7 @@ def triangulate_points_between_reference_and_target(
     valid_points = points_xyz[valid_mask]
     valid_colors_rgb = matched_pair.reference_colors_bgr[valid_mask][:, ::-1]
 
-    return valid_points, valid_colors_rgb
+    return valid_points, valid_colors_rgb, valid_mask
 
 
 def calculate_pair_reprojection_error_px(
@@ -462,8 +464,232 @@ def calculate_pair_reprojection_error_px(
     return 0.5 * (ref_error + tgt_error)
 
 
+
+def project_points_to_reference_and_target(
+    points_xyz: np.ndarray,
+    reference_calibration: CameraCalibration,
+    target_calibration: CameraCalibration,
+    target_pose: CameraPose,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Project 3D points to the reference and target camera image planes."""
+    projected_ref, _ = cv2.projectPoints(
+        points_xyz.astype(np.float64),
+        np.zeros((3, 1), dtype=np.float64),
+        np.zeros((3, 1), dtype=np.float64),
+        reference_calibration.camera_matrix,
+        reference_calibration.dist_coeffs,
+    )
+
+    target_rvec, _ = cv2.Rodrigues(target_pose.rotation_ref_to_camera)
+    projected_target, _ = cv2.projectPoints(
+        points_xyz.astype(np.float64),
+        target_rvec,
+        target_pose.translation_ref_to_camera,
+        target_calibration.camera_matrix,
+        target_calibration.dist_coeffs,
+    )
+
+    return projected_ref.reshape(-1, 2), projected_target.reshape(-1, 2)
+
+
+def draw_reprojection_debug(
+    image_bgr: np.ndarray,
+    observed_points_px: np.ndarray,
+    reprojected_points_px: np.ndarray,
+) -> np.ndarray:
+    """Draw observed feature points and reprojected 3D points on an image."""
+    visualization = image_bgr.copy()
+
+    for observed, reprojected in zip(observed_points_px, reprojected_points_px):
+        ox, oy = np.rint(observed).astype(int)
+        rx, ry = np.rint(reprojected).astype(int)
+
+        cv2.circle(visualization, (ox, oy), 4, (0, 255, 0), 1, cv2.LINE_AA)
+        cv2.drawMarker(
+            visualization,
+            (rx, ry),
+            (0, 0, 255),
+            markerType=cv2.MARKER_CROSS,
+            markerSize=8,
+            thickness=1,
+            line_type=cv2.LINE_AA,
+        )
+
+    return visualization
+
+
+def save_debug_reprojection_images(
+    reference_image_bgr: np.ndarray,
+    target_image_bgr: np.ndarray,
+    matched_pair: MatchedImagePair,
+    valid_mask: np.ndarray,
+    points_xyz: np.ndarray,
+    reference_calibration: CameraCalibration,
+    target_calibration: CameraCalibration,
+    target_pose: CameraPose,
+    reference_camera_name: str,
+    target_camera_name: str,
+    output_dir: Path | str,
+) -> None:
+    """Save observed-vs-reprojected feature visualizations for one camera pair."""
+    if len(points_xyz) == 0:
+        return
+
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    observed_reference = matched_pair.reference_points_px[valid_mask]
+    observed_target = matched_pair.target_points_px[valid_mask]
+
+    projected_reference, projected_target = project_points_to_reference_and_target(
+        points_xyz=points_xyz,
+        reference_calibration=reference_calibration,
+        target_calibration=target_calibration,
+        target_pose=target_pose,
+    )
+
+    reference_visualization = draw_reprojection_debug(
+        reference_image_bgr,
+        observed_reference,
+        projected_reference,
+    )
+    target_visualization = draw_reprojection_debug(
+        target_image_bgr,
+        observed_target,
+        projected_target,
+    )
+
+    pair_name = f"{reference_camera_name}_to_{target_camera_name}"
+
+    cv2.imwrite(
+        str(output_dir / f"{pair_name}_reference_reprojection.png"),
+        reference_visualization,
+    )
+    cv2.imwrite(
+        str(output_dir / f"{pair_name}_target_reprojection.png"),
+        target_visualization,
+    )
+
+
+def reconstruct_sparse_point_cloud_for_frame(
+    frame: dict[str, Path],
+    object_name: str,
+    camera_names: Sequence[str],
+    calibrations: dict[str, CameraCalibration],
+    poses: dict[str, CameraPose],
+    reference_camera_index: int,
+    target_camera_indices: Sequence[int],
+    feature_method: str,
+    lowe_ratio: float,
+    max_reprojection_error_px: float,
+    frame_output_dir: Path | str,
+    save_debug_images: bool,
+) -> TriangulatedPointCloud | None:
+    """Reconstruct one sparse point cloud from one synchronized frame."""
+    frame_output_dir = Path(frame_output_dir)
+    frame_key = frame["__frame_key__"].stem
+    reference_camera_name = camera_names[reference_camera_index]
+
+    reference_image = cv2.imread(str(frame[reference_camera_name]), cv2.IMREAD_COLOR)
+    if reference_image is None:
+        print(f"[WARN] Could not read reference image for frame {frame_key}")
+        return None
+
+    frame_points: list[np.ndarray] = []
+    frame_colors: list[np.ndarray] = []
+
+    for target_camera_index in target_camera_indices:
+        if target_camera_index == reference_camera_index:
+            continue
+
+        target_camera_name = camera_names[target_camera_index]
+        print(
+            f"[DEBUG] Using pair: {reference_camera_name} - {target_camera_name} "
+            f"(indices {reference_camera_index}-{target_camera_index}), frame={frame_key}"
+        )
+
+        target_image = cv2.imread(str(frame[target_camera_name]), cv2.IMREAD_COLOR)
+        if target_image is None:
+            print(f"[WARN] Could not read target image {frame[target_camera_name]}")
+            continue
+
+        debug_match_image_path = None
+        if save_debug_images:
+            debug_match_image_path = (
+                frame_output_dir
+                / "debug"
+                / "feature_matches"
+                / f"{reference_camera_name}_to_{target_camera_name}_matches.jpg"
+            )
+
+        matched_pair = match_features(
+            reference_image_bgr=reference_image,
+            target_image_bgr=target_image,
+            method=feature_method,
+            lowe_ratio=lowe_ratio,
+            debug_match_image_path=debug_match_image_path,
+            max_debug_matches=100,
+        )
+
+        if matched_pair is None:
+            print(
+                f"[WARN] Not enough feature matches: "
+                f"frame={frame_key}, target={target_camera_name}"
+            )
+            continue
+
+        points_xyz, colors_rgb, valid_mask = triangulate_points_between_reference_and_target(
+            matched_pair=matched_pair,
+            reference_calibration=calibrations[reference_camera_name],
+            target_calibration=calibrations[target_camera_name],
+            target_pose=poses[target_camera_name],
+            max_reprojection_error_px=max_reprojection_error_px,
+        )
+
+        print(
+            f"frame={frame_key}, pair={reference_camera_name}-{target_camera_name}: "
+            f"matches={len(matched_pair.reference_points_px)}, "
+            f"triangulated={len(points_xyz)}"
+        )
+
+        if len(points_xyz) == 0:
+            continue
+
+        frame_points.append(points_xyz)
+        frame_colors.append(colors_rgb)
+
+        if save_debug_images:
+            save_debug_reprojection_images(
+                reference_image_bgr=reference_image,
+                target_image_bgr=target_image,
+                matched_pair=matched_pair,
+                valid_mask=valid_mask,
+                points_xyz=points_xyz,
+                reference_calibration=calibrations[reference_camera_name],
+                target_calibration=calibrations[target_camera_name],
+                target_pose=poses[target_camera_name],
+                reference_camera_name=reference_camera_name,
+                target_camera_name=target_camera_name,
+                output_dir=frame_output_dir / "debug" / "reprojection",
+            )
+
+    if not frame_points:
+        print(
+            f"[WARN] No triangulated points were produced for "
+            f"{object_name}, frame {frame_key}"
+        )
+        return None
+
+    return TriangulatedPointCloud(
+        points_xyz=np.vstack(frame_points).astype(np.float32),
+        colors_rgb=np.vstack(frame_colors).astype(np.uint8),
+        source_object_name=object_name,
+        source_frame_key=frame_key,
+    )
+
 def reconstruct_object_sparse_point_cloud(
     object_root: Path | str,
+    object_output_dir: Path | str,
     camera_names: Sequence[str],
     calibrations: dict[str, CameraCalibration],
     poses: dict[str, CameraPose],
@@ -473,14 +699,13 @@ def reconstruct_object_sparse_point_cloud(
     max_reprojection_error_px: float = 5.0,
     target_camera_indices: Sequence[int] | None = None,
     frame_keys_to_use: Sequence[str] | None = None,
-) -> TriangulatedPointCloud:
-    """Reconstruct a sparse point cloud for one object folder."""
+    save_debug_images: bool = False,
+) -> list[TriangulatedPointCloud]:
+    """Reconstruct separate sparse point clouds for all selected frames."""
     object_root = Path(object_root)
+    object_output_dir = Path(object_output_dir)
     object_name = object_root.name
-    reference_camera_name = camera_names[reference_camera_index]
 
-    # For debugging: optionally reconstruct only selected camera pairs.
-    # If target_camera_indices is None, use all cameras except the reference camera.
     if target_camera_indices is None:
         target_camera_indices = [
             index
@@ -502,10 +727,8 @@ def reconstruct_object_sparse_point_cloud(
         camera_names=camera_names,
     )
 
-    # For debugging: optionally use only selected frame keys.
     if frame_keys_to_use is not None:
         allowed_frame_keys = {str(key) for key in frame_keys_to_use}
-
         frames = [
             frame
             for frame in frames
@@ -519,93 +742,41 @@ def reconstruct_object_sparse_point_cloud(
             )
 
     print(
-        f"[DEBUG] {object_name}: using target_camera_indices={list(target_camera_indices)}, "
+        f"[DEBUG] {object_name}: using target_camera_indices="
+        f"{list(target_camera_indices)}, "
         f"frame_keys={[frame['__frame_key__'].stem for frame in frames]}"
     )
 
-    all_points: list[np.ndarray] = []
-    all_colors: list[np.ndarray] = []
-    used_frame_keys: list[str] = []
+    point_clouds: list[TriangulatedPointCloud] = []
 
     for frame in frames:
         frame_key = frame["__frame_key__"].stem
-        reference_image = cv2.imread(str(frame[reference_camera_name]), cv2.IMREAD_COLOR)
-        if reference_image is None:
-            print(f"[WARN] Could not read reference image for frame {frame_key}")
-            continue
+        frame_output_dir = object_output_dir / f"frame_{frame_key}"
 
-        frame_points: list[np.ndarray] = []
-        frame_colors: list[np.ndarray] = []
+        point_cloud = reconstruct_sparse_point_cloud_for_frame(
+            frame=frame,
+            object_name=object_name,
+            camera_names=camera_names,
+            calibrations=calibrations,
+            poses=poses,
+            reference_camera_index=reference_camera_index,
+            target_camera_indices=target_camera_indices,
+            feature_method=feature_method,
+            lowe_ratio=lowe_ratio,
+            max_reprojection_error_px=max_reprojection_error_px,
+            frame_output_dir=frame_output_dir,
+            save_debug_images=save_debug_images,
+        )
 
-        for target_camera_index in target_camera_indices:
-            if target_camera_index == reference_camera_index:
-                continue
+        if point_cloud is not None:
+            point_clouds.append(point_cloud)
 
-            target_camera_name = camera_names[target_camera_index]
+    if not point_clouds:
+        raise RuntimeError(
+            f"No triangulated frame point clouds were produced for {object_root}"
+        )
 
-            print(
-                f"[DEBUG] Using pair: {reference_camera_name} - {target_camera_name} "
-                f"(indices {reference_camera_index}-{target_camera_index}), frame={frame_key}"
-            )
-
-            target_image = cv2.imread(str(frame[target_camera_name]), cv2.IMREAD_COLOR)
-            if target_image is None:
-                print(f"[WARN] Could not read target image {frame[target_camera_name]}")
-                continue
-
-            debug_match_image_path = (
-                object_root
-                / "debug_feature_matches"
-                / f"frame_{frame_key}_{reference_camera_name}_to_{target_camera_name}_matches.jpg"
-            )
-
-            matched_pair = match_features(
-                reference_image_bgr=reference_image,
-                target_image_bgr=target_image,
-                method=feature_method,
-                lowe_ratio=lowe_ratio,
-                debug_match_image_path=debug_match_image_path,
-                max_debug_matches=100,
-            )
-
-            if matched_pair is None:
-                print(f"[WARN] Not enough feature matches: frame={frame_key}, target={target_camera_name}")
-                continue
-
-            points_xyz, colors_rgb = triangulate_points_between_reference_and_target(
-                matched_pair=matched_pair,
-                reference_calibration=calibrations[reference_camera_name],
-                target_calibration=calibrations[target_camera_name],
-                target_pose=poses[target_camera_name],
-                max_reprojection_error_px=max_reprojection_error_px,
-            )
-
-            print(
-                f"frame={frame_key}, pair={reference_camera_name}-{target_camera_name}: "
-                f"matches={len(matched_pair.reference_points_px)}, triangulated={len(points_xyz)}"
-            )
-
-            if len(points_xyz) > 0:
-                frame_points.append(points_xyz)
-                frame_colors.append(colors_rgb)
-
-        if frame_points:
-            all_points.append(np.vstack(frame_points))
-            all_colors.append(np.vstack(frame_colors))
-            used_frame_keys.append(frame_key)
-
-    if not all_points:
-        raise RuntimeError(f"No triangulated points were produced for {object_root}")
-
-    points = np.vstack(all_points).astype(np.float32)
-    colors = np.vstack(all_colors).astype(np.uint8)
-
-    return TriangulatedPointCloud(
-        points_xyz=points,
-        colors_rgb=colors,
-        source_object_name=object_name,
-        source_frame_keys=used_frame_keys,
-    )
+    return point_clouds
 
 
 def save_point_cloud_npz(
@@ -621,7 +792,7 @@ def save_point_cloud_npz(
         points_xyz=point_cloud.points_xyz,
         colors_rgb=point_cloud.colors_rgb,
         source_object_name=np.asarray(point_cloud.source_object_name),
-        source_frame_keys=np.asarray(point_cloud.source_frame_keys),
+        source_frame_key=np.asarray(point_cloud.source_frame_key),
     )
 
 
@@ -655,6 +826,33 @@ def save_point_cloud_ply(
             )
 
 
+
+def save_frame_info_json(
+    point_cloud: TriangulatedPointCloud,
+    output_path: Path | str,
+    reference_camera_name: str,
+    target_camera_names: Sequence[str],
+    processing_time_s: float,
+) -> None:
+    """Save frame-level reconstruction metadata for later pipeline stages."""
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    data = {
+        "frame_key": point_cloud.source_frame_key,
+        "object_name": point_cloud.source_object_name,
+        "reference_camera": reference_camera_name,
+        "target_cameras": list(target_camera_names),
+        "triangulated_points": int(len(point_cloud.points_xyz)),
+        "filtered_points": None,
+        "visual_hull_occupied_voxels": None,
+        "visual_hull_surface_voxels": None,
+        "processing_time_s": float(processing_time_s),
+    }
+
+    with output_path.open("w", encoding="utf-8") as file:
+        json.dump(data, file, indent=2)
+
 def load_project_calibrations(
     calibration_files_root: Path | str,
     camera_names: Sequence[str],
@@ -677,8 +875,9 @@ def reconstruct_all_objects_in_project(
     target_camera_indices: Sequence[int] | None = None,
     frame_keys_to_use: Sequence[str] | None = None,
     output_folder_name: str = "reconstruction_results",
+    save_debug_images: bool = False,
 ) -> None:
-    """Reconstruct sparse point clouds for every object folder in the project."""
+    """Reconstruct and save one sparse point cloud per selected frame."""
     project_root = Path(project_root)
     calibration_files_root = project_root / "calibration_files"
     objects_root = project_root / "object"
@@ -703,11 +902,31 @@ def reconstruct_all_objects_in_project(
     if not object_dirs:
         raise FileNotFoundError(f"No object folders found under {objects_root}")
 
+    if target_camera_indices is None:
+        active_target_indices = [
+            index
+            for index in range(len(camera_names))
+            if index != reference_camera_index
+        ]
+    else:
+        active_target_indices = list(target_camera_indices)
+
+    reference_camera_name = camera_names[reference_camera_index]
+    target_camera_names = [
+        camera_names[index]
+        for index in active_target_indices
+        if index != reference_camera_index
+    ]
+
     for object_dir in object_dirs:
         print(f"\nReconstructing object: {object_dir.name}")
+        object_output_dir = output_root / object_dir.name
 
-        point_cloud = reconstruct_object_sparse_point_cloud(
+        start_time = time.perf_counter()
+
+        point_clouds = reconstruct_object_sparse_point_cloud(
             object_root=object_dir,
+            object_output_dir=object_output_dir,
             camera_names=camera_names,
             calibrations=calibrations,
             poses=poses,
@@ -715,42 +934,71 @@ def reconstruct_all_objects_in_project(
             feature_method="sift",
             lowe_ratio=0.75,
             max_reprojection_error_px=5.0,
-            target_camera_indices=target_camera_indices, # For debugging
-            frame_keys_to_use=frame_keys_to_use, # For debugging
+            target_camera_indices=active_target_indices,
+            frame_keys_to_use=frame_keys_to_use,
+            save_debug_images=save_debug_images,
         )
 
-        object_output_dir = output_root / object_dir.name
-        npz_path = object_output_dir / f"{object_dir.name}_sparse_point_cloud.npz"
-        ply_path = object_output_dir / f"{object_dir.name}_sparse_point_cloud.ply"
+        elapsed_total = time.perf_counter() - start_time
+        per_frame_time = elapsed_total / len(point_clouds)
 
-        save_point_cloud_npz(point_cloud, npz_path)
-        save_point_cloud_ply(point_cloud, ply_path)
+        for point_cloud in point_clouds:
+            frame_output_dir = (
+                object_output_dir / f"frame_{point_cloud.source_frame_key}"
+            )
 
-        print(f"Saved NPZ: {npz_path}")
-        print(f"Saved PLY: {ply_path}")
-        print(f"Points: {len(point_cloud.points_xyz)}")
+            npz_path = frame_output_dir / "sparse_point_cloud.npz"
+            ply_path = frame_output_dir / "sparse_point_cloud.ply"
+            frame_info_path = frame_output_dir / "frame_info.json"
+
+            save_point_cloud_npz(point_cloud, npz_path)
+            save_point_cloud_ply(point_cloud, ply_path)
+            save_frame_info_json(
+                point_cloud=point_cloud,
+                output_path=frame_info_path,
+                reference_camera_name=reference_camera_name,
+                target_camera_names=target_camera_names,
+                processing_time_s=per_frame_time,
+            )
+
+            print(f"Saved NPZ: {npz_path}")
+            print(f"Saved PLY: {ply_path}")
+            print(
+                f"Frame {point_cloud.source_frame_key}: "
+                f"{len(point_cloud.points_xyz)} points"
+            )
+
 
 def main() -> None:
     config = load_project_config(Path("project_config.yaml"))
     project_root = Path(config["img_root"])
 
     debug = config.get("debug", {})
+    debug_enabled = bool(debug.get("enabled", False))
     run_suffix = make_run_suffix(config)
 
-    target_camera_indices = debug.get("target_camera_indices")
-    frame_keys_to_use = debug.get("frame_keys_to_use")
+    if debug_enabled:
+        target_camera_indices = debug.get("target_camera_indices")
+        frame_keys_to_use = debug.get("frame_keys_to_use")
+    else:
+        target_camera_indices = None
+        frame_keys_to_use = None
 
     camera_names = config["camera_names"]
-    output_folder_name = config["folders"]["reconstruction_results"] + run_suffix
-        
+    output_folder_name = (
+        config["folders"]["reconstruction_results"] + run_suffix
+    )
+
     reconstruct_all_objects_in_project(
         project_root=project_root,
         camera_names=camera_names,
         reference_camera_index=config["reference_camera_index"],
-        target_camera_indices=target_camera_indices, 
+        target_camera_indices=target_camera_indices,
         frame_keys_to_use=frame_keys_to_use,
         output_folder_name=output_folder_name,
+        save_debug_images=debug_enabled,
     )
+
 
 if __name__ == "__main__":
     main()

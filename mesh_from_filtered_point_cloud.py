@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Sequence
-from project_config import load_project_config
+from project_config import load_project_config, make_run_suffix
 
 import numpy as np
 
@@ -21,12 +22,12 @@ MeshMethod = Literal["alpha", "ball_pivoting", "poisson"]
 
 @dataclass
 class PointCloudData:
-    """Point cloud data loaded from an NPZ file."""
+    """Point cloud data loaded from one frame-specific NPZ file."""
 
     points_xyz: np.ndarray
     colors_rgb: np.ndarray | None
     source_object_name: str
-    source_frame_keys: list[str]
+    source_frame_key: str
 
 
 @dataclass
@@ -67,7 +68,7 @@ def natural_sort_key(text: str) -> list[int | str]:
 
 
 def load_point_cloud_npz(path: Path | str) -> PointCloudData:
-    """Load a filtered point cloud from an NPZ file."""
+    """Load a frame-specific filtered point cloud from an NPZ file."""
     path = Path(path)
 
     with np.load(path, allow_pickle=True) as data:
@@ -77,19 +78,19 @@ def load_point_cloud_npz(path: Path | str) -> PointCloudData:
         if "colors_rgb" in data:
             colors_rgb = np.asarray(data["colors_rgb"], dtype=np.uint8)
 
-        source_object_name = path.parent.name
+        source_object_name = path.parent.parent.name
         if "source_object_name" in data:
             source_object_name = str(data["source_object_name"])
 
-        source_frame_keys: list[str] = []
-        if "source_frame_keys" in data:
-            source_frame_keys = [str(value) for value in data["source_frame_keys"]]
+        source_frame_key = path.parent.name.removeprefix("frame_")
+        if "source_frame_key" in data:
+            source_frame_key = str(data["source_frame_key"])
 
     return PointCloudData(
         points_xyz=points_xyz,
         colors_rgb=colors_rgb,
         source_object_name=source_object_name,
-        source_frame_keys=source_frame_keys,
+        source_frame_key=source_frame_key,
     )
 
 
@@ -305,71 +306,107 @@ def visualize_cloud_and_mesh(
     cloud: o3d.geometry.PointCloud,
     mesh: o3d.geometry.TriangleMesh,
     object_name: str,
+    frame_key: str,
 ) -> None:
-    """Visualize the prepared point cloud and generated mesh in Open3D."""
+    """Visualize one frame's prepared point cloud and generated mesh."""
     print("Opening point cloud window...")
     o3d.visualization.draw_geometries(
         [cloud],
-        window_name=f"Prepared point cloud: {object_name}",
+        window_name=f"Prepared point cloud: {object_name}, frame {frame_key}",
         point_show_normal=False,
     )
 
     print("Opening mesh window...")
     o3d.visualization.draw_geometries(
         [mesh],
-        window_name=f"Mesh: {object_name}",
+        window_name=f"Mesh: {object_name}, frame {frame_key}",
         mesh_show_back_face=True,
     )
 
 
-def find_filtered_point_clouds(input_root: Path | str) -> list[Path]:
-    """Find filtered point-cloud NPZ files under input_root."""
-    input_root = Path(input_root)
+def find_filtered_point_clouds(
+    reconstruction_root: Path | str,
+) -> list[Path]:
+    """Find frame-specific filtered point-cloud NPZ files."""
+    reconstruction_root = Path(reconstruction_root)
 
-    paths = sorted(
-        input_root.glob("*/**/*_filtered_point_cloud.npz"),
-        key=lambda p: natural_sort_key(str(p)),
+    return sorted(
+        reconstruction_root.glob("**/filtered_point_cloud.npz"),
+        key=lambda path: natural_sort_key(str(path)),
     )
 
-    if not paths:
-        paths = sorted(
-            input_root.glob("**/*.npz"),
-            key=lambda p: natural_sort_key(str(p)),
-        )
 
-    return paths
+def update_frame_info_json(
+    frame_info_path: Path | str,
+    **updates,
+) -> None:
+    """Update selected fields in an existing frame_info.json file."""
+    frame_info_path = Path(frame_info_path)
+
+    if frame_info_path.exists():
+        with frame_info_path.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+    else:
+        data = {}
+
+    data.update(updates)
+
+    frame_info_path.parent.mkdir(parents=True, exist_ok=True)
+    with frame_info_path.open("w", encoding="utf-8") as file:
+        json.dump(data, file, indent=2)
 
 
 def mesh_all_filtered_point_clouds(
-    input_root: Path | str,
-    output_root: Path | str,
+    reconstruction_root: Path | str,
     settings: MeshSettings,
     visualize_each: bool = True,
 ) -> None:
-    """Create meshes for all filtered point clouds found under input_root."""
-    input_paths = find_filtered_point_clouds(input_root)
-    output_root = Path(output_root)
+    """Create a mesh for every frame-specific filtered point cloud."""
+    reconstruction_root = Path(reconstruction_root)
+    input_paths = find_filtered_point_clouds(reconstruction_root)
 
     if not input_paths:
-        raise FileNotFoundError(f"No filtered NPZ point clouds found under {input_root}")
+        raise FileNotFoundError(
+            f"No filtered_point_cloud.npz files found under "
+            f"{reconstruction_root}"
+        )
 
     for input_path in input_paths:
         print(f"\nProcessing: {input_path}")
 
         point_cloud = load_point_cloud_npz(input_path)
         cloud, mesh = create_mesh_from_point_cloud(point_cloud, settings)
-        print_mesh_summary(mesh, label=f"Mesh for {point_cloud.source_object_name}")
 
-        object_output_dir = output_root / point_cloud.source_object_name
+        label = (
+            f"Mesh for {point_cloud.source_object_name}, "
+            f"frame {point_cloud.source_frame_key}"
+        )
+        print_mesh_summary(mesh, label=label)
+
+        frame_output_dir = input_path.parent
         method_name = settings.method
 
-        prepared_cloud_path = object_output_dir / f"{point_cloud.source_object_name}_prepared_for_mesh.ply"
-        mesh_ply_path = object_output_dir / f"{point_cloud.source_object_name}_{method_name}_mesh.ply"
-        mesh_obj_path = object_output_dir / f"{point_cloud.source_object_name}_{method_name}_mesh.obj"
+        prepared_cloud_path = (
+            frame_output_dir / "prepared_for_mesh.ply"
+        )
+        mesh_ply_path = (
+            frame_output_dir / f"{method_name}_mesh.ply"
+        )
+        mesh_obj_path = (
+            frame_output_dir / f"{method_name}_mesh.obj"
+        )
+        frame_info_path = frame_output_dir / "frame_info.json"
 
         save_prepared_point_cloud(cloud, prepared_cloud_path)
         save_mesh(mesh, mesh_ply_path)
         save_mesh(mesh, mesh_obj_path)
+
+        update_frame_info_json(
+            frame_info_path,
+            mesh_method=method_name,
+            mesh_vertices=int(len(mesh.vertices)),
+            mesh_triangles=int(len(mesh.triangles)),
+        )
 
         print(f"Saved prepared point cloud: {prepared_cloud_path}")
         print(f"Saved mesh PLY: {mesh_ply_path}")
@@ -380,15 +417,24 @@ def mesh_all_filtered_point_clouds(
                 cloud=cloud,
                 mesh=mesh,
                 object_name=point_cloud.source_object_name,
+                frame_key=point_cloud.source_frame_key,
             )
 
 
 def main() -> None:
+    """VS Code friendly entry point using project_config.yaml."""
     config = load_project_config(Path("project_config.yaml"))
     project_root = Path(config["img_root"])
 
-    input_root = project_root / config["folders"]["filtered_point_clouds"]
-    output_root = project_root / config["folders"]["mesh_results"]
+    run_suffix = make_run_suffix(config)
+
+    reconstruction_root = (
+        project_root
+        / (
+            config["folders"]["reconstruction_results"]
+            + run_suffix
+        )
+    )
 
     # Coordinate units are the same as in calibration. If square size was mm,
     # alpha, radii, normal_radius, and voxel_size are also in mm.
@@ -397,11 +443,10 @@ def main() -> None:
         # Use "poisson" only if the filtered cloud is dense enough.
         method="alpha",
 
-        # For sparse clouds, tune this interactively.
-        # Smaller: tighter but more holes. Larger: fills gaps but may create false surfaces.
+        # Smaller: tighter but more holes.
+        # Larger: fills gaps but may create false surfaces.
         alpha=5.0,
 
-        # Try radii related to estimated point spacing.
         # If estimated spacing is about 1 mm, use e.g. (1.0, 2.0, 4.0).
         ball_pivoting_radii=(1.0, 2.0, 4.0),
 
@@ -416,8 +461,7 @@ def main() -> None:
     )
 
     mesh_all_filtered_point_clouds(
-        input_root=input_root,
-        output_root=output_root,
+        reconstruction_root=reconstruction_root,
         settings=settings,
         visualize_each=True,
     )

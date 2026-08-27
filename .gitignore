@@ -1,6 +1,7 @@
 __pycache__/
 foto3Dvenv/
 .foto3Dvenv/
+tmp/
 test.py
 project_config.yaml
 *.pyc

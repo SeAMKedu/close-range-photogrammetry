@@ -24,6 +24,25 @@ filenames:
   calibration_result_ending: "_calibration.json"
   extrinsics_result: "extrinsics_result.json"
 
+# Optional correction when camera capture counters are cyclically offset.
+# Verify offsets from calibration geometry; do not copy dataset-specific values.
+# stereo_sync:
+#   frame_cycle_length: 15
+#   frame_key_offsets:
+#     Basler 60gc: 0
+#     Basler 60gm: 9
+#     Hikrobot: 9
+
+# Optional reproducible one-frame sparse reconstruction baseline.
+# sparse_baseline:
+#   object_name: terminal_green
+#   frame_key: "1"
+#   target_camera_indices: [1]
+#   feature_method: sift
+#   lowe_ratio: 0.75
+#   max_reprojection_error_px: 2.0
+#   output_folder: reconstruction_results_baseline
+
 visual_hull:
   # The borders in the reference camera's coordinate system.
   # The unit is the same as the chessboard square size

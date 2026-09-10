@@ -5,3 +5,7 @@ tmp/
 test.py
 project_config.yaml
 *.pyc
+.venv/
+2026-05-07/
+2026-05-19/
+Profile scanner reference/

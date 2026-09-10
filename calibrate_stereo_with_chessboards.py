@@ -151,6 +151,8 @@ def collect_synchronized_frames_by_camera_dirs(
     images_root: Path | str,
     camera_names: Sequence[str],
     image_extensions: Sequence[str] = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"),
+    frame_key_offsets: dict[str, int] | None = None,
+    frame_cycle_length: int | None = None,
 ) -> list[dict[str, Path]]:
     """
     Collect synchronized image sets from camera-specific folders.
@@ -168,6 +170,9 @@ def collect_synchronized_frames_by_camera_dirs(
     By default, the frame key is the part before the first underscore.
     """
     images_root = Path(images_root)
+    frame_key_offsets = frame_key_offsets or {}
+    if frame_key_offsets and (frame_cycle_length is None or frame_cycle_length < 1):
+        raise ValueError("frame_cycle_length must be positive when frame offsets are used.")
     camera_dirs = {camera_name: images_root / camera_name for camera_name in camera_names}
 
     missing_dirs = [name for name, path in camera_dirs.items() if not path.is_dir()]
@@ -185,7 +190,20 @@ def collect_synchronized_frames_by_camera_dirs(
             if not is_supported_image(path, image_extensions):
                 continue
 
-            frame_key = default_frame_key_from_filename(path)
+            source_frame_key = default_frame_key_from_filename(path)
+            offset = int(frame_key_offsets.get(camera_name, 0))
+            if offset:
+                try:
+                    source_number = int(source_frame_key)
+                except ValueError as exc:
+                    raise ValueError(
+                        f"Frame offsets require numeric frame keys, got '{source_frame_key}' in {path}."
+                    ) from exc
+                # An offset describes which source image corresponds to a
+                # reference frame: target = reference + offset, cyclically.
+                frame_key = str(((source_number - 1 - offset) % frame_cycle_length) + 1)
+            else:
+                frame_key = source_frame_key
 
             if frame_key in files_by_key:
                 raise RuntimeError(
@@ -468,6 +486,8 @@ def calibrate_multicamera_extrinsics(
     save_corner_images: bool = False,
     corner_output_folder: Path | str | None = None,
     output_json_path: Path | str | None = None,
+    frame_key_offsets: dict[str, int] | None = None,
+    frame_cycle_length: int | None = None,
 ) -> MultiCameraExtrinsicsResult:
     """Calibrate relative extrinsics for a fixed multi-camera setup."""
     if len(intrinsics_paths) != len(camera_names):
@@ -487,6 +507,8 @@ def calibrate_multicamera_extrinsics(
     frames = collect_synchronized_frames_by_camera_dirs(
         images_root=images_root,
         camera_names=camera_names,
+        frame_key_offsets=frame_key_offsets,
+        frame_cycle_length=frame_cycle_length,
     )
 
     detected_frames, image_sizes = detect_checkerboards_in_synchronized_frames(
@@ -581,6 +603,8 @@ def main() -> None:
         save_corner_images=True,
         corner_output_folder=chessboard_images_root / "extrinsics_found_patterns",
         output_json_path=img_root / config["folders"]["calibration_files"] / config["filenames"]["extrinsics_result"],
+        frame_key_offsets=config.get("stereo_sync", {}).get("frame_key_offsets"),
+        frame_cycle_length=config.get("stereo_sync", {}).get("frame_cycle_length"),
     )
 
     print("Calibration finished.")

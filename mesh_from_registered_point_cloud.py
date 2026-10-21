@@ -552,37 +552,179 @@ def save_prepared_point_cloud(
     )
 
 
+def create_metric_grid(
+    geometries: Sequence[
+        o3d.geometry.PointCloud | o3d.geometry.TriangleMesh
+    ],
+) -> tuple[o3d.geometry.LineSet, float]:
+    """Create three bounding grid planes in mm, shared by both views.
+
+    Grid coordinates are multiples of a 1, 2 or 5 x power-of-ten step.
+    The colored edges indicate +X (red), +Y (green), and +Z (blue)
+    from the lower grid corner, which is not necessarily the origin.
+    """
+    bounds = [
+        (geometry.get_min_bound(), geometry.get_max_bound())
+        for geometry in geometries
+        if not geometry.is_empty()
+    ]
+    if not bounds:
+        raise ValueError("Cannot create a metric grid for empty geometries.")
+
+    lower = np.min([bound[0] for bound in bounds], axis=0)
+    upper = np.max([bound[1] for bound in bounds], axis=0)
+    if not np.all(np.isfinite([lower, upper])):
+        raise ValueError("Metric grid requires finite geometry bounds.")
+
+    # Aim for about ten cells along the longest dimension.
+    target = float(np.max(upper - lower)) / 10.0
+    if target <= 0:
+        target = 1.0
+    magnitude = 10.0 ** np.floor(np.log10(target))
+    spacing_mm = float(next(
+        factor * magnitude
+        for factor in (1, 2, 5, 10)
+        if factor * magnitude >= target
+    ))
+    lower = np.floor(lower / spacing_mm) * spacing_mm
+    upper = np.ceil(upper / spacing_mm) * spacing_mm
+    upper = np.maximum(upper, lower + spacing_mm)
+
+    points = []
+    lines = []
+    colors = []
+    axis_colors = np.eye(3) * 0.75
+    seen = set()
+    # XY, XZ, and YZ planes at the lower bounding corner.
+    for axis_a, axis_b in ((0, 1), (0, 2), (1, 2)):
+        for varying, along in ((axis_a, axis_b), (axis_b, axis_a)):
+            count = int(round(
+                (upper[varying] - lower[varying]) / spacing_mm
+            ))
+            for index in range(count + 1):
+                start = lower.copy()
+                start[varying] += index * spacing_mm
+                end = start.copy()
+                end[along] = upper[along]
+                key = (tuple(start), tuple(end))
+                if key in seen:
+                    continue
+                seen.add(key)
+                lines.append((len(points), len(points) + 1))
+                points.extend((start, end))
+                colors.append(
+                    axis_colors[along] if index == 0
+                    else (0.65, 0.65, 0.65)
+                )
+
+    grid = o3d.geometry.LineSet()
+    grid.points = o3d.utility.Vector3dVector(np.asarray(points))
+    grid.lines = o3d.utility.Vector2iVector(np.asarray(lines))
+    grid.colors = o3d.utility.Vector3dVector(np.asarray(colors))
+    print(f"Metric grid: {spacing_mm:g} mm per cell; "
+          "axis directions: X=red, Y=green, Z=blue")
+    for axis, minimum, maximum in zip("XYZ", lower, upper):
+        print(f"  {axis}: {minimum:g} ... {maximum:g} mm")
+    return grid, spacing_mm
+
+
+def add_metric_grid_labels(
+    visualizer: o3d.visualization.O3DVisualizer,
+    grid: o3d.geometry.LineSet,
+    spacing_mm: float,
+) -> None:
+    """Anchor axis titles and camera-origin tick values beside grid edges."""
+    lower = grid.get_min_bound()
+    upper = grid.get_max_bound()
+    # Offset labels outside the three planes to keep geometry unobscured.
+    padding = max(float(np.max(upper - lower)) * 0.04, spacing_mm * 0.4)
+    offsets = np.array([
+        [0.0, -padding, 0.0],
+        [-padding, 0.0, 0.0],
+        [-padding, -padding, 0.0],
+    ])
+    for axis, name in enumerate("XYZ"):
+        count = int(round((upper[axis] - lower[axis]) / spacing_mm))
+        for index in range(count + 1):
+            value = lower[axis] + index * spacing_mm
+            if abs(value) < spacing_mm * 1e-9:
+                value = 0.0
+            position = lower + offsets[axis]
+            position[axis] = value
+            visualizer.add_3d_label(position, f"{value:g} mm")
+        title_position = lower + offsets[axis]
+        title_position[axis] = upper[axis] + 2.0 * padding
+        visualizer.add_3d_label(title_position, f"+{name} (mm)")
+
+
 def visualize_cloud_and_mesh(
     cloud: o3d.geometry.PointCloud,
     mesh: o3d.geometry.TriangleMesh,
     object_name: str,
 ) -> None:
-    """Visualize the prepared registered cloud and generated mesh."""
+    """Display in mm with +Z toward the overhead reference camera.
+
+    Rotate the camera frame 180 degrees around X: (x, y, z) ->
+    (x, -y, -z). This preserves handedness and the camera origin;
+    sample Z values are therefore negative. Only display copies change.
+    """
+    camera_to_display = np.diag([1.0, -1.0, -1.0, 1.0])
+    cloud = o3d.geometry.PointCloud(cloud)
+    mesh = o3d.geometry.TriangleMesh(mesh)
+    cloud.transform(camera_to_display)
+    mesh.transform(camera_to_display)
+    grid, spacing_mm = create_metric_grid((cloud, mesh))
+    grid_label = (
+        f" | grid: {spacing_mm:g} mm | XYZ: RGB | +Z toward camera"
+    )
     print(
-        "Opening prepared registered "
-        "point cloud window..."
+        "Display frame: X=x, Y=-y, Z=-z; +Z points toward the camera. "
+        "Origin remains at the reference camera; saved data is unchanged."
+    )
+    def initialize_view(visualizer: o3d.visualization.O3DVisualizer) -> None:
+        visualizer.show_menu(False)
+        visualizer.show_skybox(False)
+        visualizer.set_background([1.0, 1.0, 1.0, 1.0], None)
+        add_metric_grid_labels(visualizer, grid, spacing_mm)
+
+    # Unlit black points reproduce the original cloud appearance regardless
+    # of the GUI viewer's lighting. Only the display copy is recolored.
+    cloud.paint_uniform_color([0.0, 0.0, 0.0])
+    point_material = o3d.visualization.rendering.MaterialRecord()
+    point_material.shader = "defaultUnlit"
+    point_material.base_color = [0.0, 0.0, 0.0, 1.0]
+    point_material.point_size = 3.0
+
+    # Use the GUI viewer so labels stay anchored to the grid during rotation.
+    center = grid.get_center()
+    extent = float(np.max(grid.get_max_bound() - grid.get_min_bound()))
+    direction = np.array([0.5, -1.0, 0.8])
+    direction /= np.linalg.norm(direction)
+    view = dict(
+        lookat=center,
+        eye=center + direction * extent * 2.5,
+        up=[0.0, 0.0, 1.0],
+        field_of_view=60.0,
+        bg_color=[1.0, 1.0, 1.0, 1.0],
+        show_skybox=False,
+        show_ui=False,
+        on_init=initialize_view,
+    )
+    print("Opening prepared registered point cloud window...")
+    o3d.visualization.draw(
+        [
+            {"name": "Point cloud", "geometry": cloud, "material": point_material},
+            {"name": "Metric grid", "geometry": grid},
+        ],
+        title=f"Prepared registered cloud: {object_name}{grid_label}",
+        **view,
     )
 
-    o3d.visualization.draw_geometries(
-        [cloud],
-        window_name=(
-            f"Prepared registered cloud: "
-            f"{object_name}"
-        ),
-        point_show_normal=False,
-    )
-
-    print(
-        "Opening registered mesh window..."
-    )
-
-    o3d.visualization.draw_geometries(
-        [mesh],
-        window_name=(
-            f"Registered mesh: "
-            f"{object_name}"
-        ),
-        mesh_show_back_face=True,
+    print("Opening registered mesh window...")
+    o3d.visualization.draw(
+        [mesh, grid],
+        title=f"Registered mesh: {object_name}{grid_label}",
+        **view,
     )
 
 

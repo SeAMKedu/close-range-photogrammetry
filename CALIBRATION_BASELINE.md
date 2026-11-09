@@ -6,7 +6,7 @@ installed successfully; `uv pip check` and OpenCV/NumPy/Open3D/PyYAML imports pa
 Run from the project directory:
 
 ```powershell
-.venv/Scripts/python.exe -u run_calibration_baseline.py
+.venv/Scripts/python.exe -u tools/baselines/run_calibration_baseline.py
 ```
 
 Local settings are in `project_config.yaml`. Intrinsics use

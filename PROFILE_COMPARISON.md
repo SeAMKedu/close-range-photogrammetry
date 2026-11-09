@@ -8,7 +8,7 @@ The cleaned 65-frame Basler reconstruction was aligned to
 Run from the project directory:
 
 ```powershell
-.venv/Scripts/python.exe -u compare_profile_reference.py
+.venv/Scripts/python.exe -u pipeline/compare_profile_reference.py
 ```
 
 The alignment tests eight axis-swap and direction candidates, initializes each

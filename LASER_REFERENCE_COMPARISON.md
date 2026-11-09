@@ -2,7 +2,7 @@
 
 > **Sini correction — 2026-11-06:** The single and threepiece comparisons have been recomputed with a fixed horizontal handedness conversion before rigid registration, matching the long/narrow and short/wide recesses. The current arrays, summaries, figures, Blender comparisons and error videos replace the mismatched results. P95 is now 0.527 mm (single) and 0.725 mm (threepiece). This is a documented, feature-supported Sini-specific conversion; the acquisition/export origin of the mismatch remains unresolved and no conversion is inferred for other objects. Raw scans and reconstruction geometry are preserved. See [the investigation and correction record](LaserScans/_inspection/Sini_orientation/README.md).
 
-The files in [LaserScans](LaserScans/) can be used directly as reference measurements. A triangle mesh is unnecessary: the PCD exports already contain organized XYZ point clouds. [laser_reference_io.py](laser_reference_io.py) reads the binary PCD geometry, checks every finite coordinate and the missing-data mask against the companion CSV, and confirms millimetre units from the paired SUR header. Original exports remain unchanged. SRF files are retained and hashed, but are not needed for geometry import.
+The files in [LaserScans](LaserScans/) can be used directly as reference measurements. A triangle mesh is unnecessary: the PCD exports already contain organized XYZ point clouds. [pipeline/laser_reference_io.py](pipeline/laser_reference_io.py) reads the binary PCD geometry, checks every finite coordinate and the missing-data mask against the companion CSV, and confirms millimetre units from the paired SUR header. Original exports remain unchanged. SRF files are retained and hashed, but are not needed for geometry import.
 
 The importer preserves all finite samples and native holes. Missing PCD cells contain NaNs; blank CSV cells are missing observations, not zero-height points. Converted ordinary PLY clouds, organized NPZ arrays and provenance reports are in [reference_import](LaserScans/reference_import/).
 
@@ -26,16 +26,16 @@ Scan 0003 has the rounded bosses protruding into the triangular recesses that ar
 Run from the project root after restoring the scanner exports and generating or restoring the dense models. These inputs and the generated results are excluded from Git; see [the data setup instructions](README.md#data-and-generated-files).
 
 ```powershell
-.\.venv\Scripts\python.exe laser_reference_io.py --audit
-.\.venv\Scripts\python.exe run_laser_reference_comparison.py
+.\.venv\Scripts\python.exe pipeline/laser_reference_io.py --audit
+.\.venv\Scripts\python.exe pipeline/run_laser_reference_comparison.py
 ```
 
-The wrapper [run_laser_reference_comparison.py](run_laser_reference_comparison.py) runs the unchanged geometric comparison, applies the required face interpretation with [update_laser_reference_labels.py](update_laser_reference_labels.py), then rerenders the labelled figures. Use this entrypoint to keep opposite-face diagnostics out of the accuracy summary. The default processes the dense three-position models. Add `--include-single` to include the single-position models. Use `--objects Metal` or `--scan-frames 3 4` to select comparisons. `--force-registration` recomputes alignment; otherwise matching cached transforms are reused. Generated results for the selected comparisons are overwritten. Source scans and photogrammetry models are preserved.
+The wrapper [pipeline/run_laser_reference_comparison.py](pipeline/run_laser_reference_comparison.py) runs the unchanged geometric comparison, applies the required face interpretation with [pipeline/update_laser_reference_labels.py](pipeline/update_laser_reference_labels.py), then rerenders the labelled figures. Use this entrypoint to keep opposite-face diagnostics out of the accuracy summary. The default processes the dense three-position models. Add `--include-single` to include the single-position models. Use `--objects Metal` or `--scan-frames 3 4` to select comparisons. `--force-registration` recomputes alignment; otherwise matching cached transforms are reused. Generated results for the selected comparisons are overwritten. Source scans and photogrammetry models are preserved.
 
 To reproduce the complete set used by the numerical verification and Blender exports, first run the import audit above, then compare all single-position and three-position models without object or scan filters:
 
 ```powershell
-.\.venv\Scripts\python.exe run_laser_reference_comparison.py --include-single
+.\.venv\Scripts\python.exe pipeline/run_laser_reference_comparison.py --include-single
 ```
 
 This requires all eleven dense models and all six scanner export sets, including the paired PCD, CSV and SUR files. Retain the original SRF files as well for the documented provenance checks. It produces thirteen model/scan comparisons: eleven eligible corresponding-surface comparisons and two opposite-face diagnostics. The default three-position-only run is insufficient for the complete verification and eleven-model Blender export below.
@@ -63,10 +63,10 @@ The exporter preserves the aligned scanner coordinates and does not recompute re
 After the complete `--include-single` comparison above, run these commands from the project root. Continue to asset generation only after numerical verification passes. Replace the Blender executable path if your installation differs:
 
 ```powershell
-.\.venv\Scripts\python.exe verify_laser_comparisons.py
-.\.venv\Scripts\python.exe prepare_laser_comparison_assets.py
-& "C:\Program Files\Blender Foundation\Blender 5.0\blender.exe" --background --python-exit-code 1 --python export_laser_comparison_blender.py
-& "C:\Program Files\Blender Foundation\Blender 5.0\blender.exe" --background --python-exit-code 1 --python verify_laser_comparison_blender.py
+.\.venv\Scripts\python.exe pipeline/verify_laser_comparisons.py
+.\.venv\Scripts\python.exe pipeline/prepare_laser_comparison_assets.py
+& "C:\Program Files\Blender Foundation\Blender 5.0\blender.exe" --background --python-exit-code 1 --python pipeline/export_laser_comparison_blender.py
+& "C:\Program Files\Blender Foundation\Blender 5.0\blender.exe" --background --python-exit-code 1 --python pipeline/verify_laser_comparison_blender.py
 ```
 
 The asset preparation selects the eleven eligible comparisons. The exporter writes eleven individual Blender files and the five-model overview under `LaserScans/comparison_results/blender/`. The last command verifies those saved files against the original scanner data and numerical comparison results, using the scanner hashes from the numerical verification report.
@@ -93,12 +93,12 @@ For comparison, the single-position Harmu model against scan 0003 has median 0.1
 
 ## Verification and review
 
-[Independent numerical verification](LaserScans/comparison_results/verification.json) passed all 13 computations. This does not make the two opposite-face comparisons suitable for accuracy assessment: eleven corresponding-surface comparisons are eligible for the primary summary. Verification recomputed the reported statistics from exported aligned PLY coordinates and the original reference PCDs, checked all three XY support radii, verified rigid transforms and point counts, and checked all 24 original scanner-export hashes. [verify_laser_comparisons.py](verify_laser_comparisons.py) reproduces these checks.
+[Independent numerical verification](LaserScans/comparison_results/verification.json) passed all 13 computations. This does not make the two opposite-face comparisons suitable for accuracy assessment: eleven corresponding-surface comparisons are eligible for the primary summary. Verification recomputed the reported statistics from exported aligned PLY coordinates and the original reference PCDs, checked all three XY support radii, verified rigid transforms and point counts, and checked all 24 original scanner-export hashes. [pipeline/verify_laser_comparisons.py](pipeline/verify_laser_comparisons.py) reproduces these checks.
 
 For a fresh run, complete the import audit and the unfiltered `--include-single` comparison above first. This verification expects all thirteen comparisons and fails if any report is missing or stale.
 
 ```powershell
-.\.venv\Scripts\python.exe verify_laser_comparisons.py
+.\.venv\Scripts\python.exe pipeline/verify_laser_comparisons.py
 ```
 
 Top and side overlays were inspected for correspondence of the object outline, holes and raised regions. This is an initial numerical and visual comparison, not formal metrological acceptance. Neither an application tolerance nor the reference scanner calibration/uncertainty budget has been supplied. No normality assumption, confidence interval or claimed certified accuracy is added to the measured distributions.

@@ -8,7 +8,7 @@ refines each consecutive frame alignment.
 Run from the project directory:
 
 ```powershell
-.venv/Scripts/python.exe -u run_registration_baseline.py
+.venv/Scripts/python.exe -u tools/baselines/run_registration_baseline.py
 ```
 
 ## Result

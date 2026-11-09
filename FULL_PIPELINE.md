@@ -7,7 +7,7 @@ statistical filtering, sequential registration and dominant-plane cleanup.
 Run the complete pipeline from the project directory:
 
 ```powershell
-.venv/Scripts/python.exe -u run_full_pipeline.py
+.venv/Scripts/python.exe -u tools/baselines/run_full_pipeline.py
 ```
 
 ## Result

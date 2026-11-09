@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "purpose": "Exact source-byte compatibility for the 2026-11-09 package relocation. New reports retain actual source hashes. Later source edits invalidate these aliases.",
+  "audit": "Compared function ASTs with the pre-move backup: comparison excludes only cache acceptance; orbit excludes only the cache reuse branch and new main entrypoint. Numerical and rendering function bodies are otherwise identical.",
+  "original_head": "5dc45795ecd9173c85efc2c88d2d4b46d09d0fe0",
+  "sources": {
+    "pipeline/compare_laser_scans.py": {
+      "original_path": "compare_laser_scans.py",
+      "original_sha256": "b4d802ee3f621a077ff20dfe02e8ef6672272ccdb5277946484c572c6d55d0e1",
+      "relocated_sha256": "61a386991a9a5b37c652b818c31013bb03f73b85fafc7b5431fb3e4059699f9a",
+      "audited_function_ast_sha256": "779b4542454fbb209bc68af60ca866d608f495d7e94c5dbadaf876ab39e0b356"
+    },
+    "tools/visualization/create_model_orbits.py": {
+      "original_path": "create_model_orbits.py",
+      "original_sha256": "1d64af3a238c9de63ba75909f559b0115528187ae1230793e962273074857ee4",
+      "relocated_sha256": "3f14dbabbdb41e81f843a7096c623f07bfa884677aa6104cf53a123da1798df4",
+      "audited_function_ast_sha256": "aae04858c0af7118d329b97e6b4238641b812221ac6d1e71fe428662508b87a2"
+    }
+  }
+}

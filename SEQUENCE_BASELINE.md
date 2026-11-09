@@ -8,7 +8,7 @@ complete turntable sequence.
 Run from the project directory:
 
 ```powershell
-.venv/Scripts/python.exe -u run_sequence_baseline.py
+.venv/Scripts/python.exe -u tools/baselines/run_sequence_baseline.py
 ```
 
 The sparse reconstruction uses SIFT, a 0.75 Lowe ratio and a 2.0 px maximum

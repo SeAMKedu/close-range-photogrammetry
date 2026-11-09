@@ -7,7 +7,7 @@ by approximately 163 ms between the two Basler cameras.
 Run from the project directory:
 
 ```powershell
-.venv/Scripts/python.exe -u run_sparse_baseline.py
+.venv/Scripts/python.exe -u tools/baselines/run_sparse_baseline.py
 ```
 
 Settings are stored in the ignored local `project_config.yaml`:
@@ -55,7 +55,7 @@ measurement accuracy.
 Run from the project directory:
 
 ```powershell
-.venv/Scripts/python.exe -u run_filter_baseline.py
+.venv/Scripts/python.exe -u tools/baselines/run_filter_baseline.py
 ```
 
 The sparse cloud uses gentle statistical filtering: 10 neighbours and a 2.0

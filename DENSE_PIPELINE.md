@@ -109,7 +109,7 @@ joten niitä ei voi olettaa pysyviksi eri asentojen välillä.
 Projektin juuresta:
 
 ```powershell
-.venv/Scripts/python.exe -u run_dense_laser_pipeline.py
+.venv/Scripts/python.exe -u pipeline/run_dense_laser_pipeline.py
 ```
 
 Komento tarkistaa välimuistin asetukset, kalibrointimuunnokset ja lähdekuvien
@@ -119,7 +119,7 @@ ja suorittaa tarkistukset. Tulostiedostot korvautuvat.
 Laske myös stereo uudelleen:
 
 ```powershell
-.venv/Scripts/python.exe -u run_dense_laser_pipeline.py --recompute
+.venv/Scripts/python.exe -u pipeline/run_dense_laser_pipeline.py --recompute
 ```
 
 Blender-polun voi antaa parametrilla `--blender`. Oletus on tämän koneen Blender 5.0.

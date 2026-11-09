@@ -13,11 +13,65 @@ The pipeline supports:
 - sparse 3D reconstruction from synchronized image sets
 - sparse point cloud filtering
 - mesh generation from filtered point clouds
+- dense stereo reconstruction and multi-position surface fusion
+- comparison against scanner reference measurements
 - debugging and visualization tools
 
 The project has been tested with:
 
 - Python 3.11.9
+
+## Source layout and main commands
+
+The processing code is in `pipeline/`. Supporting programs are grouped by
+purpose under `tools/`:
+
+```text
+pipeline/
+  run_dense_laser_pipeline.py          # dense reconstruction entrypoint
+  run_laser_reference_comparison.py    # reference comparison entrypoint
+  ...                                 # processing, export and required checks
+tools/
+  baselines/                          # earlier calibration and sparse experiments
+  diagnostics/                        # synchronization and orientation investigations
+  visualization/                      # model collections and orbit animations
+  validation/                         # additional import and output checks
+  experimental/                       # experimental visual-hull workflows
+calibration_files/                    # October camera calibration JSON files
+project_config.example.yaml
+README.md and workflow guides
+```
+
+Run commands from the project root, after installing the dependencies and
+restoring the inputs described in the workflow guides:
+
+```powershell
+.venv/Scripts/python.exe -u pipeline/run_dense_laser_pipeline.py
+.venv/Scripts/python.exe pipeline/run_laser_reference_comparison.py
+```
+
+The dense workflow includes its geometry and Blender verification steps. These
+required checks remain in `pipeline/`; `tools/validation/` contains additional
+checks such as `tools/validation/test_reference_import.py`. The two main
+entrypoints do not run every supporting program under `tools/`.
+
+The source folders do not change the data layout: image sets, scanner exports,
+calibration files and generated results keep their existing locations in the
+project root. The workflow guides below describe the prerequisites and any
+additional export steps.
+
+The layout and cache compatibility checks can be run without rebuilding models:
+
+```powershell
+.venv/Scripts/python.exe -m unittest discover -s tests -v
+```
+
+Checks against saved dense/laser results run when the local datasets are present
+and leave the saved reports unchanged; they are skipped in a source-only clone.
+The relocation manifest in `pipeline/source_relocations.json` preserves existing
+cache compatibility only for the exact audited source versions. Later algorithm
+changes invalidate old caches; do not update the manifest just to bypass that
+check.
 
 ## Dense reconstruction and reference measurements
 
@@ -26,11 +80,11 @@ comparison against scanner reference measurements:
 
 | Workflow | Entrypoint | Documentation |
 | --- | --- | --- |
-| Dense stereo, multi-position fusion, Blender export and verification | `run_dense_laser_pipeline.py` | [Dense pipeline](DENSE_PIPELINE.md) |
-| Laser scanner reference import, alignment and comparison | `run_laser_reference_comparison.py` | [Laser reference comparison](LASER_REFERENCE_COMPARISON.md) |
-| Earlier profile-scanner reference comparison | `compare_profile_reference.py` | [Profile comparison](PROFILE_COMPARISON.md) |
-| Calibration and sparse reconstruction checks | `run_calibration_baseline.py`, `run_sparse_baseline.py` | [Calibration baseline](CALIBRATION_BASELINE.md), [Sparse baseline](SPARSE_BASELINE.md) |
-| Full sparse sequence, filtering and registration | `run_full_pipeline.py` | [Full pipeline](FULL_PIPELINE.md) |
+| Dense stereo, multi-position fusion, Blender export and verification | `pipeline/run_dense_laser_pipeline.py` | [Dense pipeline](DENSE_PIPELINE.md) |
+| Laser scanner reference import, alignment and comparison | `pipeline/run_laser_reference_comparison.py` | [Laser reference comparison](LASER_REFERENCE_COMPARISON.md) |
+| Earlier profile-scanner reference comparison | `pipeline/compare_profile_reference.py` | [Profile comparison](PROFILE_COMPARISON.md) |
+| Calibration and sparse reconstruction checks | `tools/baselines/run_calibration_baseline.py`, `tools/baselines/run_sparse_baseline.py` | [Calibration baseline](CALIBRATION_BASELINE.md), [Sparse baseline](SPARSE_BASELINE.md) |
+| Full sparse sequence, filtering and registration | `tools/baselines/run_full_pipeline.py` | [Full pipeline](FULL_PIPELINE.md) |
 
 The dense and reference workflows have their own processing, export and
 verification scripts; they share calibration and reconstruction helpers.
@@ -59,11 +113,11 @@ A fresh clone needs the external inputs before running the pipelines:
 - The dense workflow starts from the sparse baseline, including
   `laser_results/run_report.json`, `fusion_report.json`, `leveling_report.json`
   and frame point clouds. Restore these under `2026-10-29/`, or generate them
-  in order with `run_laser_validation.py`, `prepare_laser_leveling.py` and
-  `merge_laser_threepiece.py`, before running `run_dense_laser_pipeline.py`.
+  in order with `pipeline/run_laser_validation.py`, `pipeline/prepare_laser_leveling.py` and
+  `pipeline/merge_laser_threepiece.py`, before running `pipeline/run_dense_laser_pipeline.py`.
 - The reference comparison requires the dense models and the scanner exports.
   Follow [the comparison guide](LASER_REFERENCE_COMPARISON.md) for import and
-  comparison commands. The import tests in `LaserScans/_inspection/` also
+  comparison commands. The import tests in `tools/validation/` also
   require the local scanner exports and converted reference files.
 - Create your local `project_config.yaml` from `project_config.example.yaml`
   for the configurable calibration and sparse workflows, then enable the
@@ -85,17 +139,17 @@ reads; processing stages still require the outputs of the earlier stages.
 
 | Entrypoint | Additional configuration sections |
 | --- | --- |
-| `run_sparse_baseline.py` | `sparse_baseline` |
-| `run_filter_baseline.py` | `sparse_baseline`, `filter_baseline` |
-| `run_sequence_baseline.py` | `sparse_baseline`, `filter_baseline`, `sequence_baseline` |
-| `run_registration_baseline.py` | `sequence_baseline`, `registration_baseline` |
-| `run_registered_filter.py` | `sequence_baseline`, `registered_filter` |
-| `run_full_pipeline.py` | `sparse_baseline`, `filter_baseline`, `full_sequence`, `registration_baseline`, `registered_filter` |
-| `compare_profile_reference.py` | `full_sequence`, `profile_comparison` |
+| `tools/baselines/run_sparse_baseline.py` | `sparse_baseline` |
+| `tools/baselines/run_filter_baseline.py` | `sparse_baseline`, `filter_baseline` |
+| `tools/baselines/run_sequence_baseline.py` | `sparse_baseline`, `filter_baseline`, `sequence_baseline` |
+| `tools/baselines/run_registration_baseline.py` | `sequence_baseline`, `registration_baseline` |
+| `tools/baselines/run_registered_filter.py` | `sequence_baseline`, `registered_filter` |
+| `tools/baselines/run_full_pipeline.py` | `sparse_baseline`, `filter_baseline`, `full_sequence`, `registration_baseline`, `registered_filter` |
+| `pipeline/compare_profile_reference.py` | `full_sequence`, `profile_comparison` |
 
-`run_full_pipeline.py` reconstructs, registers and filters the full sequence.
-Run `compare_profile_reference.py` separately afterwards for the green-object
-profile comparison. `run_gray_validation.py` runs both stages; it uses the
+`tools/baselines/run_full_pipeline.py` reconstructs, registers and filters the full sequence.
+Run `pipeline/compare_profile_reference.py` separately afterwards for the green-object
+profile comparison. `tools/baselines/run_gray_validation.py` runs both stages; it uses the
 same sparse/filter/registration sections, `gray_full_sequence` instead of
 `full_sequence`, and `gray_profile_comparison`. The marked-gray wrapper uses
 `marked_gray_full_sequence` and `marked_gray_profile_comparison` instead.
@@ -293,7 +347,7 @@ The scripts should be executed in the following order.
 
 ---
 
-### 1. calibrate_cam_with_chessboards.py
+### 1. pipeline/calibrate_cam_with_chessboards.py
 
 Performs intrinsic calibration separately for each camera using chessboard images.
 
@@ -315,7 +369,7 @@ Contains:
 
 ---
 
-### 2. calibrate_stereo_with_chessboards.py
+### 2. pipeline/calibrate_stereo_with_chessboards.py
 
 Performs stereo/extrinsic calibration between the reference camera and all other cameras.
 
@@ -334,7 +388,7 @@ Contains:
 
 ---
 
-### 3. reconstruct_sparse_point_cloud.py
+### 3. pipeline/reconstruct_sparse_point_cloud.py
 
 Performs sparse 3D reconstruction separately for each synchronized frame.
 
@@ -371,7 +425,7 @@ reconstruction_results/
 
 ---
 
-### 4. filter_point_cloud.py
+### 4. pipeline/filter_point_cloud.py
 
 Filters each frame-specific sparse point cloud before frame registration.
 
@@ -397,7 +451,7 @@ reconstruction_results/
       ...
 ```
 
-The filtered frame clouds are used as input for `register_sparse_frames.py`.
+The filtered frame clouds are used as input for `pipeline/register_sparse_frames.py`.
 
 Per-frame visualization is optional; the current `main()` sets
 `visualize_each=False` for batch processing.
@@ -412,7 +466,7 @@ Per-frame visualization is optional; the current `main()` sets
 
 ---
 
-### 5. register_sparse_frames.py
+### 5. pipeline/register_sparse_frames.py
 
 Registers the filtered frame-specific sparse point clouds into a common coordinate system.
 
@@ -454,7 +508,7 @@ Contains:
 
 ---
 
-### 6. filter_registered_point_cloud.py
+### 6. pipeline/filter_registered_point_cloud.py
 
 Filters the combined object-level point cloud produced by frame registration.
 
@@ -480,7 +534,7 @@ reconstruction_results/
 
 ---
 
-### 7. mesh_from_registered_point_cloud.py
+### 7. pipeline/mesh_from_registered_point_cloud.py
 
 Creates the final object-level surface mesh from the filtered registered point cloud.
 
@@ -516,24 +570,24 @@ Shows also the prepared registered point cloud and the resulting mesh.
 ### Main Pipeline Summary
 
 ```text
-calibrate_cam_with_chessboards.py
+pipeline/calibrate_cam_with_chessboards.py
         ↓
-calibrate_stereo_with_chessboards.py
+pipeline/calibrate_stereo_with_chessboards.py
         ↓
-reconstruct_sparse_point_cloud.py
+pipeline/reconstruct_sparse_point_cloud.py
         ↓
-filter_point_cloud.py
+pipeline/filter_point_cloud.py
         ↓
-register_sparse_frames.py
+pipeline/register_sparse_frames.py
         ↓
-filter_registered_point_cloud.py
+pipeline/filter_registered_point_cloud.py
         ↓
-mesh_from_registered_point_cloud.py
+pipeline/mesh_from_registered_point_cloud.py
 ```
 
 ### Frame-Level Mesh Generation
 
-`mesh_from_filtered_point_cloud.py` can still be used to generate meshes from individual frame reconstructions. It is useful for debugging and comparing individual frames, but it is not required in the main object-level reconstruction pipeline.
+`pipeline/mesh_from_filtered_point_cloud.py` can still be used to generate meshes from individual frame reconstructions. It is useful for debugging and comparing individual frames, but it is not required in the main object-level reconstruction pipeline.
 
 ### Experimental Visual Hull Pipeline
 
@@ -541,8 +595,8 @@ The visual hull scripts are currently experimental and **are not part of the mai
 
 These include:
 
-* `reconstruct_visual_hull.py`
-* `register_visual_hull_frames.py`
+* `tools/experimental/reconstruct_visual_hull.py`
+* `tools/experimental/register_visual_hull_frames.py`
 * related visual hull debugging scripts
 
 They are currently used for testing silhouette-based reconstruction and investigating how silhouette information could complement the feature-based sparse reconstruction. They should therefore be considered a separate experimental branch of the project.
@@ -614,7 +668,7 @@ This is useful for:
 
 ## Feature Match Debug Images
 
-`reconstruct_sparse_point_cloud.py` can save feature matching visualizations using OpenCV `drawMatches`.
+`pipeline/reconstruct_sparse_point_cloud.py` can save feature matching visualizations using OpenCV `drawMatches`.
 
 Example output:
 

@@ -26,12 +26,9 @@ Profile scanner reference/
 *.blend1
 
 # Laser scans and derived results are distributed separately. Keep the small
-# reference interpretation settings, inspection sources and correction notes.
+# reference interpretation settings and correction notes.
 /LaserScans/**
 !/LaserScans/reference_pairings.json
 !/LaserScans/_inspection/
-!/LaserScans/_inspection/test_reference_import.py
-!/LaserScans/_inspection/harmu_face/
-!/LaserScans/_inspection/harmu_face/build_face_evidence.py
 !/LaserScans/_inspection/Sini_orientation/
 !/LaserScans/_inspection/Sini_orientation/README.md

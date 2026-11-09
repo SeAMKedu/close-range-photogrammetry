@@ -1,0 +1,4 @@
+# Cache provenance hashes these source files as bytes. Keep them stable across
+# Windows and Unix checkouts so an audited relocation stays reproducible.
+/pipeline/compare_laser_scans.py text eol=lf
+/tools/visualization/create_model_orbits.py text eol=lf

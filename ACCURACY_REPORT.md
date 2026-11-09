@@ -48,7 +48,7 @@ differences are spatially limited rather than a whole-cloud offset.
 Run the green comparison from the project root with:
 
 ```powershell
-.venv/Scripts/python.exe -u compare_profile_reference.py
+.venv/Scripts/python.exe -u pipeline/compare_profile_reference.py
 ```
 
 The numerical source is

@@ -14,6 +14,16 @@ Local settings are in `project_config.yaml`. Intrinsics use
 Reference camera: Basler 60gc. Board: 16 x 11 inner corners, 7 mm squares.
 The printed board label in the inspected image confirms 12 x 17 squares and 7 mm.
 
+For a fresh clone, restore the May images separately and copy
+`project_config.example.yaml` to the ignored local `project_config.yaml`.
+Set `img_root` to the May dataset and change `folders.extrinsic_images` to
+`chessboards/extrinsics_img_sets_NEW`. Reproducing this specific baseline also
+requires uncommenting the `stereo_sync` section: cycle length 15, reference
+Basler 60gc offset 0, and Basler 60gm/Hikrobot offsets 9. These offsets were
+verified for this dataset; do not apply them to other captures without checking
+synchronization. The root `calibration_files/` contains the separate October
+camera setup and cannot substitute for the May calibration.
+
 | Calibration | RMS (px) | Images/shared frames | Baseline threshold |
 | --- | ---: | ---: | --- |
 | Basler 60gc intrinsic | 0.201136 | 15/15 | < 0.5: pass |
@@ -43,7 +53,9 @@ Hikrobot.
 Outputs under `2026-05-19/calibration_files`:
 
 - Three camera-specific intrinsic JSON files.
-- `baseline_report.json`: settings, versions, commit, metrics and acceptance=false.
+- `baseline_report.json`: settings, versions, commit, metrics and the `accepted`
+  boolean (`true` when all intrinsic and stereo screening checks pass; otherwise
+  `false`, and the runner exits before publishing the final extrinsics).
 - `extrinsics_baseline_candidate.json`: accepted candidate produced by the runner.
 - `extrinsics_result.json`: accepted stereo result for reconstruction.
 - `debug/intrinsics` and `debug/extrinsics`: newly generated corner overlays.

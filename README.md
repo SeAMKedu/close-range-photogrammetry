@@ -30,7 +30,7 @@ comparison against scanner reference measurements:
 | Laser scanner reference import, alignment and comparison | `run_laser_reference_comparison.py` | [Laser reference comparison](LASER_REFERENCE_COMPARISON.md) |
 | Earlier profile-scanner reference comparison | `compare_profile_reference.py` | [Profile comparison](PROFILE_COMPARISON.md) |
 | Calibration and sparse reconstruction checks | `run_calibration_baseline.py`, `run_sparse_baseline.py` | [Calibration baseline](CALIBRATION_BASELINE.md), [Sparse baseline](SPARSE_BASELINE.md) |
-| Full sparse sequence, filtering, registration and comparison | `run_full_pipeline.py` | [Full pipeline](FULL_PIPELINE.md) |
+| Full sparse sequence, filtering and registration | `run_full_pipeline.py` | [Full pipeline](FULL_PIPELINE.md) |
 
 The dense and reference workflows have their own processing, export and
 verification scripts; they share calibration and reconstruction helpers.
@@ -53,8 +53,9 @@ guides resolve only when the corresponding local data/results are present.
 
 A fresh clone needs the external inputs before running the pipelines:
 
-- Restore the camera captures under `2026-10-29/` and scanner exports under
-  `LaserScans/` (or `Profile scanner reference/` for the earlier comparison).
+- For the October dense/laser workflows, restore camera captures under
+  `2026-10-29/` and scanner exports under `LaserScans/`. The earlier Basler
+  baselines use the separate May datasets and `Profile scanner reference/`.
 - The dense workflow starts from the sparse baseline, including
   `laser_results/run_report.json`, `fusion_report.json`, `leveling_report.json`
   and frame point clouds. Restore these under `2026-10-29/`, or generate them
@@ -65,9 +66,51 @@ A fresh clone needs the external inputs before running the pipelines:
   comparison commands. The import tests in `LaserScans/_inspection/` also
   require the local scanner exports and converted reference files.
 - Create your local `project_config.yaml` from `project_config.example.yaml`
-  for the configurable calibration and sparse workflows. The local config is
-  ignored by Git. Blender export requires Blender; the dense wrapper accepts
+  for the configurable calibration and sparse workflows, then enable the
+  runner-specific sections described below. The local config is ignored by
+  Git. Blender export requires Blender; the dense wrapper accepts
   `--blender PATH` to override its Windows default.
+
+### Baseline runner configuration
+
+The sections for the additional `run_*` baseline scripts are commented out in
+`project_config.example.yaml`. Copying the file and changing only `img_root`
+is insufficient: uncomment each required section and its settings, preserving
+YAML indentation, and select the object, frames and output folders for your data.
+Missing sections cause a `KeyError` when the corresponding runner starts.
+
+These workflows also use the shared dataset settings in `project_config.yaml`
+as needed. The table lists the additional top-level sections each entrypoint
+reads; processing stages still require the outputs of the earlier stages.
+
+| Entrypoint | Additional configuration sections |
+| --- | --- |
+| `run_sparse_baseline.py` | `sparse_baseline` |
+| `run_filter_baseline.py` | `sparse_baseline`, `filter_baseline` |
+| `run_sequence_baseline.py` | `sparse_baseline`, `filter_baseline`, `sequence_baseline` |
+| `run_registration_baseline.py` | `sequence_baseline`, `registration_baseline` |
+| `run_registered_filter.py` | `sequence_baseline`, `registered_filter` |
+| `run_full_pipeline.py` | `sparse_baseline`, `filter_baseline`, `full_sequence`, `registration_baseline`, `registered_filter` |
+| `compare_profile_reference.py` | `full_sequence`, `profile_comparison` |
+
+`run_full_pipeline.py` reconstructs, registers and filters the full sequence.
+Run `compare_profile_reference.py` separately afterwards for the green-object
+profile comparison. `run_gray_validation.py` runs both stages; it uses the
+same sparse/filter/registration sections, `gray_full_sequence` instead of
+`full_sequence`, and `gray_profile_comparison`. The marked-gray wrapper uses
+`marked_gray_full_sequence` and `marked_gray_profile_comparison` instead.
+Set each comparison's `reference_csv` to the matching external scanner file.
+
+The baseline guides describe specific runs on the May camera setup (Basler
+60gc/60gm). They do not use the October Basler 96/07 calibration JSON files in
+the repository root. Restore or generate the calibration belonging to your
+dataset. To reproduce the May calibration, follow the dataset-specific folder
+and synchronization settings in [the calibration guide](CALIBRATION_BASELINE.md).
+The documented 15-frame sequence pilot uses frame keys 1 through 15; the example
+contains only 1 through 3, while `frame_keys: all` selects the entire sequence.
+
+The dated baseline and comparison tables report saved experimental runs; a new
+run with different inputs or settings is not expected to reproduce those values.
 
 ---
 
@@ -128,6 +171,11 @@ pip install -r requirements.txt
 
 ## Expected Image Data Structure
 
+The following folder, filename and execution-order examples describe the
+original sparse workflow. Folder and camera names are illustrative and must
+match `project_config.yaml`. The October timestamped captures and dense/laser
+workflows use the separate setup linked at the top of this README.
+
 ```text
 img_root/
 │
@@ -160,7 +208,11 @@ img_root/
 
 ## Image Naming
 
-Synchronization is based on the filename prefix before the first underscore.
+For the original sparse workflow, synchronization is based on the filename
+prefix before the first underscore. Stereo calibration can additionally apply
+the dataset-specific `stereo_sync` offsets described in the calibration guide.
+The October laser-capture runner instead groups images by camera serial and
+timestamp.
 
 Example:
 
@@ -176,7 +228,7 @@ All three images belong to frame `1`.
 
 ## project_config.yaml
 
-The pipeline configuration is centralized in:
+Shared dataset paths, camera definitions and debug selections are configured in:
 
 ```text
 project_config.yaml
@@ -190,7 +242,9 @@ This file contains:
 * reference camera index
 * debugging settings
 
-Example:
+Illustrative excerpt (not a complete runnable configuration). Camera names and
+checkerboard dimensions below are placeholders; use the full
+`project_config.example.yaml` and the settings verified for your dataset:
 
 ```yaml
 img_root: "D:/photogrammetry_project"
@@ -225,7 +279,11 @@ to:
 project_config.yaml
 ```
 
-and edit the paths for your local machine.
+and edit the paths, camera definitions and board settings for your dataset.
+For the additional baseline runners, also enable the sections listed in
+[Baseline runner configuration](#baseline-runner-configuration). Some original
+filtering and meshing algorithm settings are still set in the scripts' `main()`
+functions rather than in YAML.
 
 ---
 
@@ -341,7 +399,8 @@ reconstruction_results/
 
 The filtered frame clouds are used as input for `register_sparse_frames.py`.
 
-Shows also the original and filtered result for each frame.
+Per-frame visualization is optional; the current `main()` sets
+`visualize_each=False` for batch processing.
 
 <img src="readme_imgs/sparse_point_cloud.png" alt="Original sparse point cloud" width="600"/>
 
@@ -560,11 +619,16 @@ This is useful for:
 Example output:
 
 ```text
-object/
+reconstruction_results<run_suffix>/
   obj0/
-    debug_feature_matches/
-      frame_1_cam0_to_cam2_matches.jpg
+    frame_1/
+      debug/
+        feature_matches/
+          cam0_to_cam2_matches.jpg
 ```
+
+`<run_suffix>` is empty for a normal run and is derived from the debug camera
+and frame selections when debug mode is enabled.
 
 These images help verify:
 
@@ -600,15 +664,17 @@ Very large stereo RMS values usually indicate:
 
 ---
 
-## Current Reconstruction Characteristics
+## Original Sparse Workflow Characteristics
 
-The current pipeline performs:
+The original workflow described above performs:
 
 ```text
 sparse feature-based triangulation
 ```
 
-It is not yet a full dense multi-view stereo pipeline like:
+The separate [dense laser workflow](DENSE_PIPELINE.md) adds calibrated dense
+stereo and multi-position surface fusion. The original sparse workflow is not
+a full dense multi-view stereo pipeline like:
 
 * COLMAP
 * RealityCapture

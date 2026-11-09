@@ -23,7 +23,7 @@ Scan 0003 has the rounded bosses protruding into the triangular recesses that ar
 
 ## Running the comparison
 
-From the project root:
+Run from the project root after restoring the scanner exports and generating or restoring the dense models. These inputs and the generated results are excluded from Git; see [the data setup instructions](README.md#data-and-generated-files).
 
 ```powershell
 .\.venv\Scripts\python.exe laser_reference_io.py --audit
@@ -31,6 +31,14 @@ From the project root:
 ```
 
 The wrapper [run_laser_reference_comparison.py](run_laser_reference_comparison.py) runs the unchanged geometric comparison, applies the required face interpretation with [update_laser_reference_labels.py](update_laser_reference_labels.py), then rerenders the labelled figures. Use this entrypoint to keep opposite-face diagnostics out of the accuracy summary. The default processes the dense three-position models. Add `--include-single` to include the single-position models. Use `--objects Metal` or `--scan-frames 3 4` to select comparisons. `--force-registration` recomputes alignment; otherwise matching cached transforms are reused. Generated results for the selected comparisons are overwritten. Source scans and photogrammetry models are preserved.
+
+To reproduce the complete set used by the numerical verification and Blender exports, first run the import audit above, then compare all single-position and three-position models without object or scan filters:
+
+```powershell
+.\.venv\Scripts\python.exe run_laser_reference_comparison.py --include-single
+```
+
+This requires all eleven dense models and all six scanner export sets, including the paired PCD, CSV and SUR files. Retain the original SRF files as well for the documented provenance checks. It produces thirteen model/scan comparisons: eleven eligible corresponding-surface comparisons and two opposite-face diagnostics. The default three-position-only run is insufficient for the complete verification and eleven-model Blender export below.
 
 [accuracy_summary.csv](LaserScans/comparison_results/accuracy_summary.csv) is the primary table of corresponding-surface comparisons. [summary.csv](LaserScans/comparison_results/summary.csv) and `all_comparisons.json` retain all numerical results, including the explicitly labelled opposite-face diagnostics. Each comparison folder contains the registration transform and diagnostics, full `comparison_report.json`, individual distances in `distances.npz`, aligned and colour-coded PLY clouds, and PNG/PDF figures with top/side overlays, error maps and cumulative distributions.
 
@@ -51,6 +59,17 @@ The paper was not altered during this comparison work.
 Open [the Blender overview](LaserScans/comparison_results/blender/Kaikki_kappaleet_virhevertailu.blend) to inspect the five fused models together. The same folder contains eleven individual comparison files, including the single-position reconstructions, with PNG previews. Each file has a colour-coded deviation scene and a second scene showing the aligned laser and photogrammetry clouds together. All models use the same seven distance bands; the point attribute `error_mm` retains the numerical distance, including values above the highest colour threshold.
 
 The exporter preserves the aligned scanner coordinates and does not recompute registration or remove points. Display spheres are viewing aids, not uncertainty bounds. The overview translates each paired cloud together for layout only. [Finnish viewing instructions](LaserScans/comparison_results/blender/LUE_MINUT.md) explain navigation, interpretation, the full-precision NPZ/CSV/PLY exports and rebuild commands. [Saved-file verification](LaserScans/comparison_results/blender/verification.json) checks the Blender geometry, distance attributes, colours, units and visibility against the source results.
+
+After the complete `--include-single` comparison above, run these commands from the project root. Continue to asset generation only after numerical verification passes. Replace the Blender executable path if your installation differs:
+
+```powershell
+.\.venv\Scripts\python.exe verify_laser_comparisons.py
+.\.venv\Scripts\python.exe prepare_laser_comparison_assets.py
+& "C:\Program Files\Blender Foundation\Blender 5.0\blender.exe" --background --python-exit-code 1 --python export_laser_comparison_blender.py
+& "C:\Program Files\Blender Foundation\Blender 5.0\blender.exe" --background --python-exit-code 1 --python verify_laser_comparison_blender.py
+```
+
+The asset preparation selects the eleven eligible comparisons. The exporter writes eleven individual Blender files and the five-model overview under `LaserScans/comparison_results/blender/`. The last command verifies those saved files against the original scanner data and numerical comparison results, using the scanner hashes from the numerical verification report.
 
 ## Measured results
 
@@ -75,6 +94,8 @@ For comparison, the single-position Harmu model against scan 0003 has median 0.1
 ## Verification and review
 
 [Independent numerical verification](LaserScans/comparison_results/verification.json) passed all 13 computations. This does not make the two opposite-face comparisons suitable for accuracy assessment: eleven corresponding-surface comparisons are eligible for the primary summary. Verification recomputed the reported statistics from exported aligned PLY coordinates and the original reference PCDs, checked all three XY support radii, verified rigid transforms and point counts, and checked all 24 original scanner-export hashes. [verify_laser_comparisons.py](verify_laser_comparisons.py) reproduces these checks.
+
+For a fresh run, complete the import audit and the unfiltered `--include-single` comparison above first. This verification expects all thirteen comparisons and fails if any report is missing or stale.
 
 ```powershell
 .\.venv\Scripts\python.exe verify_laser_comparisons.py

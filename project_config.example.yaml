@@ -43,6 +43,112 @@ filenames:
 #   max_reprojection_error_px: 2.0
 #   output_folder: reconstruction_results_baseline
 
+# Optional filtering for the one-frame sparse baseline. Sparse clouds usually
+# need gentler settings than the full pipeline's radius filter.
+# filter_baseline:
+#   remove_non_finite: true
+#   min_depth: 0.0
+#   max_depth: null
+#   voxel_size: null
+#   statistical_nb_neighbors: 10
+#   statistical_std_ratio: 2.0
+#   radius_outlier_nb_points: null
+#   radius_outlier_radius: null
+
+# Optional multi-frame pilot using the accepted sparse and filtering settings.
+# sequence_baseline:
+#   object_name: terminal_green
+#   frame_keys: ["1", "2", "3"]
+#   target_camera_indices: [1]
+#   output_folder: reconstruction_results_basler_sequence
+#   save_debug_images: true
+
+# Full sequence variant. The literal value `all` uses every frame shared by the
+# configured reference and target camera directories.
+# full_sequence:
+#   object_name: terminal_green
+#   frame_keys: all
+#   target_camera_indices: [1]
+#   output_folder: reconstruction_results_basler_full
+#   save_debug_images: true
+
+# Additional objects can use the same pipeline with their own result folder.
+# gray_full_sequence:
+#   object_name: terminal_gray
+#   frame_keys: all
+#   target_camera_indices: [1]
+#   output_folder: reconstruction_results_basler_gray_full
+#   save_debug_images: true
+
+# marked_gray_full_sequence:
+#   object_name: marked_terminal_gray
+#   frame_keys: all
+#   target_camera_indices: [1]
+#   output_folder: reconstruction_results_basler_marked_gray_full
+#   save_debug_images: true
+
+# Optional sequential registration pilot for sequence_baseline results.
+# registration_baseline:
+#   stereo_target_camera_index: 1
+#   sift_nfeatures: 8000
+#   stereo_lowe_ratio: 0.75
+#   temporal_lowe_ratio: 0.70
+#   max_reprojection_error_px: 2.0
+#   ransac_iterations: 2000
+#   ransac_inlier_threshold: 3.0
+#   ransac_min_inliers: 6
+#   icp_max_correspondence_distance: 5.0
+#   icp_max_iterations: 100
+#   merged_voxel_size: null
+#   save_debug_matches: true
+#   save_debug_clouds: true
+#   max_debug_matches: 100
+#   review_min_inliers: 10
+#   review_min_icp_fitness: 0.5
+#   review_max_icp_rmse_mm: 2.0
+
+# Optional dominant-plane cleanup after sequential registration.
+# registered_filter:
+#   dominant_plane_distance_mm: 1.5
+#   ransac_iterations: 5000
+
+# Optional comparison against a profile-scanner height-map CSV.
+# profile_comparison:
+#   reference_csv: "D:/your_reference/terminal_green.csv"
+#   alignment_accepted: false
+#   scanner_plane_threshold_mm: 0.25
+#   scanner_plane_iterations: 5000
+#   scanner_icp_voxel_mm: 0.25
+#   icp_max_distance_mm: 5.0
+#   xy_coverage_radius_mm: 0.75
+#   error_map_max_mm: 1.5
+#   blender_point_radius_mm: 0.12
+#   blender_overlay_point_radius_mm: 0.08
+
+# gray_profile_comparison:
+#   reference_csv: "D:/your_reference/terminal_grey.csv"
+#   alignment_accepted: false
+#   scanner_plane_threshold_mm: 0.25
+#   scanner_plane_iterations: 5000
+#   scanner_icp_voxel_mm: 0.25
+#   icp_max_distance_mm: 5.0
+#   xy_coverage_radius_mm: 0.75
+#   error_map_max_mm: 1.5
+#   blender_point_radius_mm: 0.12
+#   blender_overlay_point_radius_mm: 0.08
+
+# marked_gray_profile_comparison:
+#   reference_csv: "D:/your_reference/terminal_grey.csv"
+#   alignment_accepted: false
+#   scanner_plane_threshold_mm: 0.25
+#   scanner_plane_iterations: 5000
+#   scanner_icp_voxel_mm: 0.25
+#   icp_max_distance_mm: 5.0
+#   xy_coverage_radius_mm: 0.75
+#   error_map_max_mm: 1.5
+#   blender_point_radius_mm: 0.12
+#   blender_overlay_point_radius_mm: 0.08
+
 visual_hull:
   # The borders in the reference camera's coordinate system.
   # The unit is the same as the chessboard square size

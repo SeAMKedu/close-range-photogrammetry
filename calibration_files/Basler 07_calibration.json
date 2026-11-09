@@ -1,0 +1,70 @@
+{
+  "rms_error": 0.24328514732190795,
+  "camera_matrix": [
+    [
+      3732.1629899675136,
+      0.0,
+      772.2444872811769
+    ],
+    [
+      0.0,
+      3733.635904193951,
+      549.3691974136129
+    ],
+    [
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "dist_coeffs": [
+    [
+      -0.12025452501345214,
+      -1.9233570986535695,
+      0.0004920806115432872,
+      0.0011410171182237134,
+      20.173020570895396
+    ]
+  ],
+  "new_camera_matrix": [
+    [
+      3690.132671281336,
+      0.0,
+      772.8442391930228
+    ],
+    [
+      0.0,
+      3691.1272599762738,
+      549.3516875729234
+    ],
+    [
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "roi": [
+    3,
+    4,
+    1593,
+    1190
+  ],
+  "mean_reprojection_error": 0.018307394288240155,
+  "used_images": [
+    "C:\\Users\\k5000582\\Documents\\Hankkeet\\3DLaatu\\Kuvasetit\\2026-10-20\\chessboards\\intrinsics_img_sets\\Basler 07\\Cam_acA1600-60gm_21578807_2026-10-20_14-57-55-754.jpg",
+    "C:\\Users\\k5000582\\Documents\\Hankkeet\\3DLaatu\\Kuvasetit\\2026-10-20\\chessboards\\intrinsics_img_sets\\Basler 07\\Cam_acA1600-60gm_21578807_2026-10-20_14-58-09-363.jpg",
+    "C:\\Users\\k5000582\\Documents\\Hankkeet\\3DLaatu\\Kuvasetit\\2026-10-20\\chessboards\\intrinsics_img_sets\\Basler 07\\Cam_acA1600-60gm_21578807_2026-10-20_14-58-14-738.jpg",
+    "C:\\Users\\k5000582\\Documents\\Hankkeet\\3DLaatu\\Kuvasetit\\2026-10-20\\chessboards\\intrinsics_img_sets\\Basler 07\\Cam_acA1600-60gm_21578807_2026-10-20_14-58-35-248.jpg",
+    "C:\\Users\\k5000582\\Documents\\Hankkeet\\3DLaatu\\Kuvasetit\\2026-10-20\\chessboards\\intrinsics_img_sets\\Basler 07\\Cam_acA1600-60gm_21578807_2026-10-20_14-58-49-594.jpg",
+    "C:\\Users\\k5000582\\Documents\\Hankkeet\\3DLaatu\\Kuvasetit\\2026-10-20\\chessboards\\intrinsics_img_sets\\Basler 07\\Cam_acA1600-60gm_21578807_2026-10-20_15-00-15-412.jpg",
+    "C:\\Users\\k5000582\\Documents\\Hankkeet\\3DLaatu\\Kuvasetit\\2026-10-20\\chessboards\\intrinsics_img_sets\\Basler 07\\Cam_acA1600-60gm_21578807_2026-10-20_15-00-41-680.jpg",
+    "C:\\Users\\k5000582\\Documents\\Hankkeet\\3DLaatu\\Kuvasetit\\2026-10-20\\chessboards\\intrinsics_img_sets\\Basler 07\\Cam_acA1600-60gm_21578807_2026-10-20_15-00-55-439.jpg",
+    "C:\\Users\\k5000582\\Documents\\Hankkeet\\3DLaatu\\Kuvasetit\\2026-10-20\\chessboards\\intrinsics_img_sets\\Basler 07\\Cam_acA1600-60gm_21578807_2026-10-20_15-01-07-922.jpg",
+    "C:\\Users\\k5000582\\Documents\\Hankkeet\\3DLaatu\\Kuvasetit\\2026-10-20\\chessboards\\intrinsics_img_sets\\Basler 07\\Cam_acA1600-60gm_21578807_2026-10-20_15-01-15-573.jpg"
+  ],
+  "failed_images": [],
+  "image_size": [
+    1600,
+    1200
+  ]
+}

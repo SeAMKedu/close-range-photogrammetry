@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
 from project_config import load_project_config, make_run_suffix
@@ -47,6 +47,7 @@ class TriangulatedPointCloud:
     colors_rgb: np.ndarray
     source_object_name: str
     source_frame_key: str
+    pair_statistics: list[dict[str, object]] = field(default_factory=list)
 
 
 def natural_sort_key(text: str) -> list[int | str]:
@@ -597,6 +598,7 @@ def reconstruct_sparse_point_cloud_for_frame(
 
     frame_points: list[np.ndarray] = []
     frame_colors: list[np.ndarray] = []
+    pair_statistics: list[dict[str, object]] = []
 
     for target_camera_index in target_camera_indices:
         if target_camera_index == reference_camera_index:
@@ -632,6 +634,13 @@ def reconstruct_sparse_point_cloud_for_frame(
         )
 
         if matched_pair is None:
+            pair_statistics.append(
+                {
+                    "target_camera": target_camera_name,
+                    "feature_matches": 0,
+                    "triangulated_points": 0,
+                }
+            )
             print(
                 f"[WARN] Not enough feature matches: "
                 f"frame={frame_key}, target={target_camera_name}"
@@ -650,6 +659,14 @@ def reconstruct_sparse_point_cloud_for_frame(
             f"frame={frame_key}, pair={reference_camera_name}-{target_camera_name}: "
             f"matches={len(matched_pair.reference_points_px)}, "
             f"triangulated={len(points_xyz)}"
+        )
+
+        pair_statistics.append(
+            {
+                "target_camera": target_camera_name,
+                "feature_matches": int(len(matched_pair.reference_points_px)),
+                "triangulated_points": int(len(points_xyz)),
+            }
         )
 
         if len(points_xyz) == 0:
@@ -685,6 +702,7 @@ def reconstruct_sparse_point_cloud_for_frame(
         colors_rgb=np.vstack(frame_colors).astype(np.uint8),
         source_object_name=object_name,
         source_frame_key=frame_key,
+        pair_statistics=pair_statistics,
     )
 
 def reconstruct_object_sparse_point_cloud(
@@ -844,6 +862,7 @@ def save_frame_info_json(
         "reference_camera": reference_camera_name,
         "target_cameras": list(target_camera_names),
         "triangulated_points": int(len(point_cloud.points_xyz)),
+        "pair_statistics": point_cloud.pair_statistics,
         "filtered_points": None,
         "visual_hull_occupied_voxels": None,
         "visual_hull_surface_voxels": None,

@@ -38,6 +38,8 @@ class FilteringSettings:
     statistical_std_ratio: float = 2.0
     radius_outlier_nb_points: int | None = None
     radius_outlier_radius: float | None = None
+    dominant_plane_distance: float | None = None
+    dominant_plane_iterations: int = 5000
 
 
 def natural_sort_key(text: str) -> list[int | str]:
@@ -231,6 +233,45 @@ def remove_radius_outliers(
     )
 
 
+def filter_by_dominant_plane(
+    point_cloud: PointCloudData,
+    distance_threshold: float,
+    iterations: int = 5000,
+) -> tuple[PointCloudData, np.ndarray, np.ndarray]:
+    """Keep points close to the dominant RANSAC plane.
+
+    Returns the filtered cloud, normalized plane coefficients ``[a,b,c,d]``
+    and every input point's perpendicular distance from the plane.
+    """
+    if len(point_cloud.points_xyz) < 3:
+        raise RuntimeError("At least three points are required for plane fitting.")
+
+    cloud = point_cloud_data_to_open3d(point_cloud)
+    plane, _ = cloud.segment_plane(
+        distance_threshold=distance_threshold,
+        ransac_n=3,
+        num_iterations=iterations,
+    )
+    plane = np.asarray(plane, dtype=np.float64)
+    normal_length = float(np.linalg.norm(plane[:3]))
+    if not np.isfinite(normal_length) or normal_length == 0:
+        raise RuntimeError("Dominant-plane fitting produced an invalid normal.")
+    plane /= normal_length
+
+    residuals = np.abs(point_cloud.points_xyz @ plane[:3] + plane[3])
+    mask = residuals <= distance_threshold
+    colors = None
+    if point_cloud.colors_rgb is not None:
+        colors = point_cloud.colors_rgb[mask]
+
+    filtered = PointCloudData(
+        points_xyz=point_cloud.points_xyz[mask],
+        colors_rgb=colors,
+        source_object_name=point_cloud.source_object_name,
+    )
+    return filtered, plane, residuals
+
+
 def save_point_cloud_ply(
     point_cloud: PointCloudData,
     output_path: Path | str,
@@ -291,6 +332,18 @@ def filter_registered_point_cloud(
             settings.max_depth,
         )
         print_point_cloud_summary("After depth filtering", filtered)
+
+    if (
+        settings.dominant_plane_distance is not None
+        and settings.dominant_plane_distance > 0
+    ):
+        filtered, plane, _ = filter_by_dominant_plane(
+            filtered,
+            distance_threshold=settings.dominant_plane_distance,
+            iterations=settings.dominant_plane_iterations,
+        )
+        print(f"Dominant plane: {plane.tolist()}")
+        print_point_cloud_summary("After dominant-plane filtering", filtered)
 
     if settings.voxel_size is not None and settings.voxel_size > 0:
         filtered = voxel_downsample_with_open3d(

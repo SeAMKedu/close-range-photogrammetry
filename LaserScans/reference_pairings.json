@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "harmu_opposite_faces_confirmed_by_user": true,
+  "harmu_matching_face_frame": 3,
+  "harmu_opposite_face_frame": 4,
+  "evidence": [
+    "User confirmed the two Harmu scans are opposite faces.",
+    "User identified rounded protrusions inside recessed pockets on the photographed face, absent on the opposite face.",
+    "Native scan 0003 contains rounded protrusions near scanner XY (13,12), (24,12) and (19,23) mm, with corresponding lower-pocket features.",
+    "Native scan 0004 has smoother recess boundaries without these protrusions.",
+    "Face selection uses geometric features visible in the photographs and native scanner height maps, not the smaller fitted residual."
+  ],
+  "matching_face_status": "matched_by_distinctive_surface_features",
+  "opposite_face_role": "diagnostic_only_not_an_accuracy_comparison"
+}

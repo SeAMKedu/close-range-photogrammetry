@@ -1,0 +1,71 @@
+{
+  "rms_error": 0.3210341976947332,
+  "camera_matrix": [
+    [
+      4670.32014604199,
+      0.0,
+      2045.9142753814672
+    ],
+    [
+      0.0,
+      4670.348498357003,
+      1477.542455531393
+    ],
+    [
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "dist_coeffs": [
+    [
+      -0.09805136126875565,
+      0.1224169194390632,
+      -0.0005087891950582156,
+      -1.9934110276149248e-05,
+      0.08363201958528811
+    ]
+  ],
+  "new_camera_matrix": [
+    [
+      4593.353838770463,
+      0.0,
+      2045.8494646284978
+    ],
+    [
+      0.0,
+      4594.800929081409,
+      1476.3114861758381
+    ],
+    [
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "roi": [
+    5,
+    11,
+    4085,
+    2977
+  ],
+  "mean_reprojection_error": 0.024154356657108036,
+  "used_images": [
+    "C:\\Users\\k5000582\\Documents\\Hankkeet\\3DLaatu\\Kuvasetit\\2026-10-20\\chessboards\\intrinsics_img_sets\\Hikrobot\\Cam_MV-CH120-10GC_02F21752586_2026-10-20_15-02-03-885.jpg",
+    "C:\\Users\\k5000582\\Documents\\Hankkeet\\3DLaatu\\Kuvasetit\\2026-10-20\\chessboards\\intrinsics_img_sets\\Hikrobot\\Cam_MV-CH120-10GC_02F21752586_2026-10-20_15-02-08-398.jpg",
+    "C:\\Users\\k5000582\\Documents\\Hankkeet\\3DLaatu\\Kuvasetit\\2026-10-20\\chessboards\\intrinsics_img_sets\\Hikrobot\\Cam_MV-CH120-10GC_02F21752586_2026-10-20_15-02-16-473.jpg",
+    "C:\\Users\\k5000582\\Documents\\Hankkeet\\3DLaatu\\Kuvasetit\\2026-10-20\\chessboards\\intrinsics_img_sets\\Hikrobot\\Cam_MV-CH120-10GC_02F21752586_2026-10-20_15-02-25-838.jpg",
+    "C:\\Users\\k5000582\\Documents\\Hankkeet\\3DLaatu\\Kuvasetit\\2026-10-20\\chessboards\\intrinsics_img_sets\\Hikrobot\\Cam_MV-CH120-10GC_02F21752586_2026-10-20_15-02-37-582.jpg",
+    "C:\\Users\\k5000582\\Documents\\Hankkeet\\3DLaatu\\Kuvasetit\\2026-10-20\\chessboards\\intrinsics_img_sets\\Hikrobot\\Cam_MV-CH120-10GC_02F21752586_2026-10-20_15-02-49-487.jpg",
+    "C:\\Users\\k5000582\\Documents\\Hankkeet\\3DLaatu\\Kuvasetit\\2026-10-20\\chessboards\\intrinsics_img_sets\\Hikrobot\\Cam_MV-CH120-10GC_02F21752586_2026-10-20_15-03-01-933.jpg",
+    "C:\\Users\\k5000582\\Documents\\Hankkeet\\3DLaatu\\Kuvasetit\\2026-10-20\\chessboards\\intrinsics_img_sets\\Hikrobot\\Cam_MV-CH120-10GC_02F21752586_2026-10-20_15-03-08-322.jpg",
+    "C:\\Users\\k5000582\\Documents\\Hankkeet\\3DLaatu\\Kuvasetit\\2026-10-20\\chessboards\\intrinsics_img_sets\\Hikrobot\\Cam_MV-CH120-10GC_02F21752586_2026-10-20_15-03-14-190.jpg",
+    "C:\\Users\\k5000582\\Documents\\Hankkeet\\3DLaatu\\Kuvasetit\\2026-10-20\\chessboards\\intrinsics_img_sets\\Hikrobot\\Cam_MV-CH120-10GC_02F21752586_2026-10-20_15-03-24-496.jpg",
+    "C:\\Users\\k5000582\\Documents\\Hankkeet\\3DLaatu\\Kuvasetit\\2026-10-20\\chessboards\\intrinsics_img_sets\\Hikrobot\\Cam_MV-CH120-10GC_02F21752586_2026-10-20_15-03-55-564.jpg"
+  ],
+  "failed_images": [],
+  "image_size": [
+    4096,
+    3000
+  ]
+}
